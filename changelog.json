@@ -1,5 +1,6 @@
 {
   "releases": {
+    "3.5.5-test6": ["[New] Automated test release"],
     "3.5.5-beta2": [
       "[New] Enable one-time opening of a repository in an alternate editor` - #21436. Thanks @jackfreem!",
       "[Fixed] Git output containing multibyte characters is handled correctly avoiding unexpected crashes - #21469",
