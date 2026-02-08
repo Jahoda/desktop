@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { ITabState } from '../../lib/app-state'
 import { TabItem } from './tab-item'
-import { Repository } from '../../models/repository'
 
 interface ITabBarProps {
   readonly tabs: ReadonlyArray<ITabState>

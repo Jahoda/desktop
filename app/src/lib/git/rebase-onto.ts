@@ -3,6 +3,7 @@ import { git } from './core'
 import { getStatus } from './status'
 import { Branch } from '../../models/branch'
 import { RebaseResult } from './rebase'
+import { AppFileStatusKind } from '../../models/status'
 
 export interface IRebaseOntoResult {
   readonly result: RebaseResult
@@ -130,7 +131,7 @@ export async function rebaseOntoDefaultBranch(
     const status = await getStatus(repository)
     if (status !== null) {
       const hasConflicts = status.workingDirectory.files.some(
-        f => f.status.kind === 'conflicted'
+        f => f.status.kind === AppFileStatusKind.Conflicted
       )
       if (hasConflicts) {
         return {
