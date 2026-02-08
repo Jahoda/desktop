@@ -64,10 +64,10 @@ export function buildDefaultMenu({
 
   if (__DARWIN__) {
     template.push({
-      label: 'GitHub Desktop',
+      label: 'Gait Desktop',
       submenu: [
         {
-          label: 'About GitHub Desktop',
+          label: 'About Gait Desktop',
           click: emit('show-about'),
           id: 'about',
         },
@@ -223,6 +223,21 @@ export function buildDefaultMenu({
         accelerator: 'CmdOrCtrl+L',
         click: emit('toggle-changes-filter'),
       },
+      separator,
+      {
+        label: __DARWIN__
+          ? 'Toggle NPM Scripts Panel'
+          : 'Toggle NPM Scripts &Panel',
+        id: 'toggle-npm-scripts-panel',
+        click: emit('toggle-npm-scripts-panel'),
+      },
+      {
+        label: __DARWIN__ ? 'Toggle Terminal' : 'Toggle &Terminal',
+        id: 'toggle-terminal-panel',
+        accelerator: 'CmdOrCtrl+`',
+        click: emit('toggle-terminal-panel'),
+      },
+      separator,
       {
         label: __DARWIN__ ? 'Toggle Full Screen' : 'Toggle &full screen',
         role: 'togglefullscreen',
@@ -455,6 +470,13 @@ export function buildDefaultMenu({
       accelerator: 'CmdOrCtrl+Shift+E',
       click: emit('rebase-branch'),
     },
+    {
+      label: __DARWIN__
+        ? 'Rebase onto Default Branch'
+        : 'Rebase onto &default branch',
+      id: 'rebase-onto-default-branch',
+      click: emit('rebase-onto-default-branch'),
+    },
     separator,
     {
       label: __DARWIN__ ? 'Compare on GitHub' : 'Compare on &GitHub',
@@ -581,7 +603,7 @@ export function buildDefaultMenu({
         ...helpItems,
         separator,
         {
-          label: '&About GitHub Desktop',
+          label: '&About Gait Desktop',
           click: emit('show-about'),
           id: 'about',
         },

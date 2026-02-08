@@ -22,6 +22,7 @@ export type MenuEvent =
   | 'merge-branch'
   | 'squash-and-merge-branch'
   | 'rebase-branch'
+  | 'rebase-onto-default-branch'
   | 'show-repository-settings'
   | 'open-in-shell'
   | 'compare-on-github'
@@ -46,6 +47,8 @@ export type MenuEvent =
   | 'decrease-active-resizable-width'
   | 'increase-active-resizable-width'
   | 'toggle-changes-filter'
+  | 'toggle-npm-scripts-panel'
+  | 'toggle-terminal-panel'
   | TestMenuEvent
 
 /**

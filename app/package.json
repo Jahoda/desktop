@@ -1,8 +1,8 @@
 {
-  "name": "desktop",
-  "productName": "GitHub Desktop",
-  "bundleID": "com.github.GitHubClient",
-  "companyName": "GitHub, Inc.",
+  "name": "gait-desktop",
+  "productName": "Gait Desktop",
+  "bundleID": "com.gait.GaitDesktop",
+  "companyName": "Gait",
   "version": "3.5.5-beta3",
   "main": "./main.js",
   "repository": {
@@ -20,6 +20,8 @@
     "@floating-ui/react-dom": "^2.1.2",
     "@github/alive-client": "^1.2.0",
     "@xterm/xterm": "^5.5.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "node-pty": "^1.0.0",
     "app-path": "^3.3.0",
     "byline": "^5.0.0",
     "chalk": "^2.3.0",

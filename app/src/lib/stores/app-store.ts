@@ -110,6 +110,7 @@ import {
   Foldout,
   FoldoutType,
   IAppState,
+  ITabState,
   ICompareBranch,
   ICompareFormUpdate,
   ICompareToBranch,
@@ -191,6 +192,12 @@ import {
   TerminalOutput,
   HookProgress,
 } from '../git'
+import {
+  findDefaultBranch,
+  isWorkingTreeClean,
+  rebaseOntoDefaultBranch,
+  IRebaseOntoResult,
+} from '../git/rebase-onto'
 import {
   installGlobalLFSFilters,
   installLFSHooks,
@@ -476,6 +483,18 @@ export class AppStore extends TypedBaseStore<IAppState> {
   private recentRepositories: ReadonlyArray<number> = new Array<number>()
 
   private selectedRepository: Repository | CloningRepository | null = null
+
+  /** Whether the npm scripts panel is visible */
+  private showNpmScriptsPanel: boolean = false
+
+  /** Whether the terminal panel is visible */
+  private showTerminalPanel: boolean = false
+
+  /** Open repository tabs */
+  private openTabs: ReadonlyArray<ITabState> = []
+
+  /** Index of the currently active tab */
+  private activeTabIndex: number = -1
 
   /** The background fetcher for the currently selected repository. */
   private currentBackgroundFetcher: BackgroundFetcher | null = null
@@ -1126,6 +1145,10 @@ export class AppStore extends TypedBaseStore<IAppState> {
       commitMessageGenerationButtonClicked:
         this.commitMessageGenerationButtonClicked,
       showChangesFilter: this.showChangesFilter,
+      showNpmScriptsPanel: this.showNpmScriptsPanel,
+      showTerminalPanel: this.showTerminalPanel,
+      openTabs: this.openTabs,
+      activeTabIndex: this.activeTabIndex,
     }
   }
 
@@ -1228,6 +1251,9 @@ export class AppStore extends TypedBaseStore<IAppState> {
       remote: gitStore.currentRemote,
       lastFetched: gitStore.lastFetched,
     }))
+
+    // Update tab branch name when the git store updates
+    this.updateCurrentTabBranchName(repository)
 
     // _selectWorkingDirectoryFiles and _selectStashedFile will
     // emit updates by themselves.
@@ -1921,6 +1947,9 @@ export class AppStore extends TypedBaseStore<IAppState> {
       return Promise.resolve(null)
     }
 
+    // Ensure a tab exists for the selected repository
+    this.ensureTabForRepository(repository)
+
     setNumber(LastSelectedRepositoryIDKey, repository.id)
 
     const previousRepositoryId = previouslySelectedRepository
@@ -1950,6 +1979,159 @@ export class AppStore extends TypedBaseStore<IAppState> {
       refreshedRepository,
       previouslySelectedRepository
     )
+  }
+
+  /** Toggle the npm scripts panel visibility */
+  public _toggleNpmScriptsPanel(): void {
+    this.showNpmScriptsPanel = !this.showNpmScriptsPanel
+    this.emitUpdate()
+  }
+
+  /** Toggle the terminal panel visibility */
+  public _toggleTerminalPanel(): void {
+    this.showTerminalPanel = !this.showTerminalPanel
+    this.emitUpdate()
+  }
+
+  /** Open a repository in a new tab or switch to existing tab */
+  public _openTab(repository: Repository): void {
+    const existingIndex = this.openTabs.findIndex(
+      t => t.repository.id === repository.id
+    )
+
+    if (existingIndex >= 0) {
+      this.activeTabIndex = existingIndex
+    } else {
+      const branchName = this.getCurrentBranchName(repository)
+      const newTab: ITabState = { repository, branchName }
+      this.openTabs = [...this.openTabs, newTab]
+      this.activeTabIndex = this.openTabs.length - 1
+    }
+
+    this.emitUpdate()
+    this._selectRepository(repository)
+  }
+
+  /** Close a tab by index */
+  public _closeTab(index: number): void {
+    if (index < 0 || index >= this.openTabs.length) {
+      return
+    }
+
+    // Don't close the last tab
+    if (this.openTabs.length <= 1) {
+      return
+    }
+
+    const tabs = [...this.openTabs]
+    tabs.splice(index, 1)
+    this.openTabs = tabs
+
+    if (this.activeTabIndex >= tabs.length) {
+      this.activeTabIndex = tabs.length - 1
+    } else if (index < this.activeTabIndex) {
+      this.activeTabIndex = this.activeTabIndex - 1
+    } else if (index === this.activeTabIndex) {
+      // Switch to the tab that took the closed tab's position
+      this.activeTabIndex = Math.min(index, tabs.length - 1)
+    }
+
+    const activeTab = this.openTabs[this.activeTabIndex]
+    if (activeTab) {
+      this._selectRepository(activeTab.repository)
+    }
+
+    this.emitUpdate()
+  }
+
+  /** Switch to a tab by index */
+  public _selectTab(index: number): void {
+    if (index < 0 || index >= this.openTabs.length) {
+      return
+    }
+
+    this.activeTabIndex = index
+    const tab = this.openTabs[index]
+    this.emitUpdate()
+    this._selectRepository(tab.repository)
+  }
+
+  /** Move a tab from one position to another */
+  public _moveTab(fromIndex: number, toIndex: number): void {
+    if (
+      fromIndex < 0 ||
+      fromIndex >= this.openTabs.length ||
+      toIndex < 0 ||
+      toIndex >= this.openTabs.length
+    ) {
+      return
+    }
+
+    const tabs = [...this.openTabs]
+    const [moved] = tabs.splice(fromIndex, 1)
+    tabs.splice(toIndex, 0, moved)
+    this.openTabs = tabs
+
+    // Update active index to follow the active tab
+    if (this.activeTabIndex === fromIndex) {
+      this.activeTabIndex = toIndex
+    } else if (
+      fromIndex < this.activeTabIndex &&
+      toIndex >= this.activeTabIndex
+    ) {
+      this.activeTabIndex--
+    } else if (
+      fromIndex > this.activeTabIndex &&
+      toIndex <= this.activeTabIndex
+    ) {
+      this.activeTabIndex++
+    }
+
+    this.emitUpdate()
+  }
+
+  /** Update the branch name for the current tab */
+  private updateCurrentTabBranchName(repository: Repository): void {
+    const branchName = this.getCurrentBranchName(repository)
+    const tabIndex = this.openTabs.findIndex(
+      t => t.repository.id === repository.id
+    )
+
+    if (tabIndex >= 0) {
+      const tabs = [...this.openTabs]
+      tabs[tabIndex] = { ...tabs[tabIndex], branchName }
+      this.openTabs = tabs
+    }
+  }
+
+  /** Get the current branch name for a repository */
+  private getCurrentBranchName(repository: Repository): string | null {
+    try {
+      const gitStore = this.gitStoreCache.get(repository)
+      const tip = gitStore.tip
+      if (tip.kind === TipState.Valid) {
+        return tip.branch.name
+      }
+    } catch {
+      // ignore
+    }
+    return null
+  }
+
+  /** Ensure the selected repository has a tab open */
+  private ensureTabForRepository(repository: Repository): void {
+    const existingIndex = this.openTabs.findIndex(
+      t => t.repository.id === repository.id
+    )
+
+    if (existingIndex < 0) {
+      const branchName = this.getCurrentBranchName(repository)
+      const newTab: ITabState = { repository, branchName }
+      this.openTabs = [...this.openTabs, newTab]
+      this.activeTabIndex = this.openTabs.length - 1
+    } else {
+      this.activeTabIndex = existingIndex
+    }
   }
 
   // update the stored list of recently opened repositories
@@ -5827,6 +6009,43 @@ export class AppStore extends TypedBaseStore<IAppState> {
         userHasResolvedConflicts: true,
       })
     )
+  }
+
+  /** Rebase current branch onto the default branch (main/master). See `Dispatcher`. */
+  public async _rebaseOntoDefaultBranch(
+    repository: Repository
+  ): Promise<IRebaseOntoResult | null> {
+    const state = this.repositoryStateCache.get(repository)
+    const { branchesState } = state
+    const { allBranches, tip } = branchesState
+
+    if (tip.kind !== TipState.Valid) {
+      return null
+    }
+
+    const defaultBranch = await findDefaultBranch(repository, allBranches)
+    if (defaultBranch === null) {
+      return null
+    }
+
+    // Don't rebase if we're already on the default branch
+    if (tip.branch.name === defaultBranch.name) {
+      return null
+    }
+
+    // Check for dirty working tree
+    const isClean = await isWorkingTreeClean(repository)
+    if (!isClean) {
+      this.emitUpdate()
+      return null
+    }
+
+    const result = await rebaseOntoDefaultBranch(repository, defaultBranch)
+
+    // Refresh the repository state after rebase
+    await this._refreshRepository(repository)
+
+    return result
   }
 
   /** This shouldn't be called directly. See `Dispatcher`. */

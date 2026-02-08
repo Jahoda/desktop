@@ -1,0 +1,133 @@
+.terminal-panel {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--box-border-color);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.terminal-resize-handle {
+  height: 4px;
+  cursor: ns-resize;
+  background: transparent;
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+  z-index: 10;
+
+  &:hover {
+    background-color: var(--link-button-color);
+  }
+}
+
+.terminal-panel-header {
+  display: flex;
+  align-items: center;
+  background-color: var(--box-background-color);
+  border-bottom: 1px solid var(--box-border-color);
+  min-height: 30px;
+}
+
+.terminal-tabs {
+  display: flex;
+  flex: 1;
+  overflow-x: auto;
+  align-items: stretch;
+
+  &::-webkit-scrollbar {
+    height: 2px;
+  }
+}
+
+.terminal-tab {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-right: 1px solid var(--box-border-color);
+  font-size: 11px;
+  min-width: 80px;
+  max-width: 150px;
+
+  &:hover {
+    background-color: var(--list-item-hover-background-color);
+  }
+
+  &.active {
+    background-color: var(--background-color);
+    border-bottom: 2px solid var(--link-button-color);
+  }
+}
+
+.terminal-tab-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.terminal-tab-close {
+  border: none;
+  background: none;
+  color: var(--text-secondary-color);
+  cursor: pointer;
+  padding: 0 2px;
+  margin-left: 4px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 3px;
+  opacity: 0;
+
+  &:hover {
+    background-color: var(--box-border-color);
+    color: var(--text-color);
+  }
+
+  .terminal-tab:hover &,
+  .terminal-tab.active & {
+    opacity: 1;
+  }
+}
+
+.terminal-new-tab-btn {
+  border: none;
+  background: none;
+  color: var(--text-secondary-color);
+  cursor: pointer;
+  padding: 4px 10px;
+  font-size: 16px;
+  line-height: 1;
+
+  &:hover {
+    background-color: var(--list-item-hover-background-color);
+    color: var(--text-color);
+  }
+}
+
+.terminal-content {
+  flex: 1;
+  overflow: hidden;
+  background-color: #1e1e1e;
+}
+
+.terminal-view {
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+
+  .xterm {
+    height: 100%;
+  }
+
+  .xterm-viewport {
+    &::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background-color: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+    }
+  }
+}

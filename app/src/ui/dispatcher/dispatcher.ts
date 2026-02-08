@@ -290,6 +290,36 @@ export class Dispatcher {
     return this.appStore._selectRepository(repository)
   }
 
+  /** Toggle the npm scripts panel */
+  public toggleNpmScriptsPanel(): void {
+    this.appStore._toggleNpmScriptsPanel()
+  }
+
+  /** Toggle the terminal panel */
+  public toggleTerminalPanel(): void {
+    this.appStore._toggleTerminalPanel()
+  }
+
+  /** Open a repository in a new tab */
+  public openTab(repository: Repository): void {
+    this.appStore._openTab(repository)
+  }
+
+  /** Close a tab by index */
+  public closeTab(index: number): void {
+    this.appStore._closeTab(index)
+  }
+
+  /** Switch to a tab by index */
+  public selectTab(index: number): void {
+    this.appStore._selectTab(index)
+  }
+
+  /** Move a tab from one position to another */
+  public moveTab(fromIndex: number, toIndex: number): void {
+    this.appStore._moveTab(fromIndex, toIndex)
+  }
+
   /** Change the selected section in the repository. */
   public changeRepositorySection(
     repository: Repository,
@@ -1193,6 +1223,16 @@ export class Dispatcher {
    */
   public setConflictsResolved(repository: Repository) {
     return this.appStore._setConflictsResolved(repository)
+  }
+
+  /** Rebase current branch onto the default branch (main/master) */
+  public async rebaseOntoDefaultBranch(
+    repository: Repository
+  ): Promise<void> {
+    const result = await this.appStore._rebaseOntoDefaultBranch(repository)
+    if (result === null) {
+      return
+    }
   }
 
   /** Starts a rebase for the given base and target branch */

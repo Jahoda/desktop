@@ -198,6 +198,10 @@ import {
 } from './secret-scanning/bypass-push-protection-dialog'
 import { HookFailed } from './hook-failed/hook-failed'
 import { CommitProgress } from './commit-progress/commit-progress'
+import { TabBar } from './tabs/tab-bar'
+import { NpmScriptsPanel } from './npm-scripts/npm-scripts-panel'
+import { detectNpmScripts, INpmScripts } from '../lib/npm/script-detector'
+import { TerminalPanel } from './terminal/terminal-panel'
 
 const MinuteInMilliseconds = 1000 * 60
 const HourInMilliseconds = MinuteInMilliseconds * 60
@@ -249,6 +253,8 @@ export class App extends React.Component<IAppProps, IAppState> {
   private updateIntervalHandle?: number
 
   private repositoryViewRef = React.createRef<RepositoryView>()
+  private npmScriptsCache: INpmScripts | null | undefined = undefined
+  private npmScriptsRepoPath: string | null = null
 
   /**
    * Gets a value indicating whether or not we're currently showing a
@@ -477,6 +483,8 @@ export class App extends React.Component<IAppProps, IAppState> {
       case 'rebase-branch':
         this.props.dispatcher.incrementMetric('rebaseCurrentBranchMenuCount')
         return this.showRebaseDialog()
+      case 'rebase-onto-default-branch':
+        return this.rebaseOntoDefaultBranch()
       case 'show-repository-settings':
         return this.showRepositorySettings()
       case 'view-repository-on-github':
@@ -523,6 +531,10 @@ export class App extends React.Component<IAppProps, IAppState> {
         return this.resizeActiveResizable('decrease-active-resizable-width')
       case 'toggle-changes-filter':
         return this.toggleChangesFilterVisibility()
+      case 'toggle-npm-scripts-panel':
+        return this.props.dispatcher.toggleNpmScriptsPanel()
+      case 'toggle-terminal-panel':
+        return this.props.dispatcher.toggleTerminalPanel()
       default:
         if (isTestMenuEvent(name)) {
           return showTestUI(
@@ -1068,6 +1080,27 @@ export class App extends React.Component<IAppProps, IAppState> {
       return
     }
 
+    // Handle Cmd/Ctrl+` for terminal toggle
+    const modifier = __DARWIN__ ? event.metaKey : event.ctrlKey
+    if (modifier && event.key === '`' && !event.shiftKey && !event.altKey) {
+      event.preventDefault()
+      this.props.dispatcher.toggleTerminalPanel()
+      return
+    }
+
+    // Handle Cmd/Ctrl+1-9 for tab switching
+    if (modifier && !event.shiftKey && !event.altKey) {
+      const num = parseInt(event.key, 10)
+      if (num >= 1 && num <= 9) {
+        const tabIndex = num - 1
+        if (tabIndex < this.state.openTabs.length) {
+          event.preventDefault()
+          this.props.dispatcher.selectTab(tabIndex)
+          return
+        }
+      }
+    }
+
     if (shouldRenderApplicationMenu()) {
       if (event.key === 'Shift' && event.altKey) {
         this.props.dispatcher.setAccessKeyHighlightState(false)
@@ -1243,6 +1276,16 @@ export class App extends React.Component<IAppProps, IAppState> {
     }
 
     this.props.dispatcher.showRebaseDialog(repository)
+  }
+
+  private rebaseOntoDefaultBranch() {
+    const repository = this.getRepository()
+
+    if (!repository || repository instanceof CloningRepository) {
+      return
+    }
+
+    this.props.dispatcher.rebaseOntoDefaultBranch(repository)
   }
 
   private showRepositorySettings() {
@@ -2883,15 +2926,92 @@ export class App extends React.Component<IAppProps, IAppState> {
     })
   }
 
+  private onTabClicked = (index: number) => {
+    this.props.dispatcher.selectTab(index)
+  }
+
+  private onTabClosed = (index: number) => {
+    this.props.dispatcher.closeTab(index)
+  }
+
+  private onTabMoved = (fromIndex: number, toIndex: number) => {
+    this.props.dispatcher.moveTab(fromIndex, toIndex)
+  }
+
+  private renderTabBar() {
+    const { openTabs, activeTabIndex } = this.state
+    if (openTabs.length <= 1) {
+      return null
+    }
+
+    return (
+      <TabBar
+        tabs={openTabs}
+        activeTabIndex={activeTabIndex}
+        onTabClicked={this.onTabClicked}
+        onTabClosed={this.onTabClosed}
+        onTabMoved={this.onTabMoved}
+      />
+    )
+  }
+
+  private renderNpmScriptsPanel() {
+    if (!this.state.showNpmScriptsPanel) {
+      return null
+    }
+
+    const repo = this.getRepository()
+    if (!repo || repo instanceof CloningRepository) {
+      return null
+    }
+
+    // Detect scripts lazily and cache per repo path
+    if (this.npmScriptsRepoPath !== repo.path) {
+      this.npmScriptsRepoPath = repo.path
+      this.npmScriptsCache = undefined
+      detectNpmScripts(repo.path).then(result => {
+        this.npmScriptsCache = result
+        this.forceUpdate()
+      })
+    }
+
+    if (this.npmScriptsCache === undefined || this.npmScriptsCache === null) {
+      return null
+    }
+
+    return (
+      <NpmScriptsPanel
+        repoPath={repo.path}
+        scripts={this.npmScriptsCache.scripts}
+        manager={this.npmScriptsCache.manager}
+      />
+    )
+  }
+
+  private renderTerminalPanel() {
+    if (!this.state.showTerminalPanel) {
+      return null
+    }
+
+    const repo = this.getRepository()
+    const cwd =
+      repo && !(repo instanceof CloningRepository) ? repo.path : '~'
+
+    return <TerminalPanel cwd={cwd} />
+  }
+
   private renderApp() {
     return (
       <div
         id="desktop-app-contents"
         className={this.getDesktopAppContentsClassNames()}
       >
+        {this.renderTabBar()}
         {this.renderToolbar()}
         {this.renderBanner()}
         {this.renderRepository()}
+        {this.renderNpmScriptsPanel()}
+        {this.renderTerminalPanel()}
         {this.renderPopups()}
         {this.renderDragElement()}
       </div>

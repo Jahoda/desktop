@@ -86,6 +86,12 @@ export type RequestChannels = {
   'show-installing-update': () => void
   'install-windows-cli': () => void
   'uninstall-windows-cli': () => void
+  // NPM Script Runner channels
+  'npm-script-output': (id: string, data: string) => void
+  'npm-script-exit': (id: string, code: number | null) => void
+  // Terminal channels
+  'pty-output': (id: string, data: string) => void
+  'pty-exit': (id: string) => void
 }
 
 /**
@@ -133,4 +139,19 @@ export type RequestResponseChannels = {
   ) => Promise<string | null>
   'get-notifications-permission': () => Promise<DesktopNotificationPermission>
   'request-notifications-permission': () => Promise<boolean>
+  // NPM Script Runner
+  'npm-script-start': (
+    repoPath: string,
+    manager: string,
+    scriptName: string
+  ) => Promise<string>
+  'npm-script-stop': (id: string) => Promise<boolean>
+  'npm-scripts-list-running': () => Promise<
+    ReadonlyArray<{ id: string; scriptName: string; repoPath: string }>
+  >
+  // Terminal
+  'pty-create': (cwd: string) => Promise<string>
+  'pty-write': (id: string, data: string) => Promise<void>
+  'pty-resize': (id: string, cols: number, rows: number) => Promise<void>
+  'pty-destroy': (id: string) => Promise<void>
 }

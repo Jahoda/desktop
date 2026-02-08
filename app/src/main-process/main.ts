@@ -717,6 +717,63 @@ app.on('ready', () => {
   ipcMain.handle('request-notifications-permission', async () =>
     requestNotificationsPermission()
   )
+
+  // NPM Script Runner IPC handlers
+  ipcMain.handle('npm-script-start', (event, repoPath, manager, scriptName) => {
+    const { startScript } = require('../lib/npm/script-runner')
+    const webContents = event.sender
+
+    const id = startScript(
+      repoPath,
+      manager as any,
+      scriptName,
+      (scriptId: string, data: string) => {
+        if (!webContents.isDestroyed()) {
+          webContents.send('npm-script-output', scriptId, data)
+        }
+      },
+      (scriptId: string, code: number | null) => {
+        if (!webContents.isDestroyed()) {
+          webContents.send('npm-script-exit', scriptId, code)
+        }
+      }
+    )
+
+    return id
+  })
+
+  ipcMain.handle('npm-script-stop', async (_, id) => {
+    const { stopScript } = require('../lib/npm/script-runner')
+    return stopScript(id)
+  })
+
+  ipcMain.handle('npm-scripts-list-running', async () => {
+    const { getRunningScripts } = require('../lib/npm/script-runner')
+    return getRunningScripts()
+  })
+
+  // Terminal (PTY) IPC handlers
+  ipcMain.handle('pty-create', (event, cwd) => {
+    const { createTerminal } = require('./pty-manager')
+    const webContents = event.sender
+
+    return createTerminal(cwd, webContents)
+  })
+
+  ipcMain.handle('pty-write', async (_, id, data) => {
+    const { writeToTerminal } = require('./pty-manager')
+    writeToTerminal(id, data)
+  })
+
+  ipcMain.handle('pty-resize', async (_, id, cols, rows) => {
+    const { resizeTerminal } = require('./pty-manager')
+    resizeTerminal(id, cols, rows)
+  })
+
+  ipcMain.handle('pty-destroy', async (_, id) => {
+    const { destroyTerminal } = require('./pty-manager')
+    destroyTerminal(id)
+  })
 })
 
 app.on('activate', () => {

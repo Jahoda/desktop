@@ -75,6 +75,12 @@ export type PossibleSelections =
     }
   | { type: SelectionType.MissingRepository; repository: Repository }
 
+/** State for an open repository tab */
+export interface ITabState {
+  readonly repository: Repository
+  readonly branchName: string | null
+}
+
 /** All of the shared app state. */
 export interface IAppState {
   readonly accounts: ReadonlyArray<Account>
@@ -388,6 +394,18 @@ export interface IAppState {
 
   /** Whether the changes filter is shown */
   readonly showChangesFilter: boolean
+
+  /** Whether the npm scripts panel is visible */
+  readonly showNpmScriptsPanel: boolean
+
+  /** Whether the terminal panel is visible */
+  readonly showTerminalPanel: boolean
+
+  /** Open repository tabs */
+  readonly openTabs: ReadonlyArray<ITabState>
+
+  /** Index of the currently active tab */
+  readonly activeTabIndex: number
 }
 
 export enum FoldoutType {

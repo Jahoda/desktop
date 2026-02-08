@@ -1,9 +1,10 @@
 {
+  "name": "gait-desktop",
   "repository": {
     "type": "git",
-    "url": "https://github.com/desktop/desktop.git"
+    "url": "https://github.com/Jahoda/desktop.git"
   },
-  "description": "GitHub Desktop build dependencies",
+  "description": "Gait Desktop - Enhanced GitHub Desktop with tabs, npm runner, quick rebase and terminal",
   "scripts": {
     "cli": "ts-node app/src/cli/main.ts",
     "check:eslint": "tsc -P eslint-rules/",
