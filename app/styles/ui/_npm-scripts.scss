@@ -39,6 +39,51 @@
   flex: 1;
 }
 
+.npm-scripts-section {
+  border-bottom: 1px solid var(--box-border-color);
+}
+
+.npm-scripts-section-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  background-color: var(--box-background-color);
+
+  &:hover {
+    background-color: var(--list-item-hover-background-color);
+  }
+}
+
+.npm-scripts-section-arrow {
+  font-size: 9px;
+  margin-right: 6px;
+  width: 10px;
+  text-align: center;
+}
+
+.npm-scripts-section-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.npm-scripts-section-count {
+  font-size: 10px;
+  color: var(--text-secondary-color);
+  font-weight: normal;
+  margin-left: 6px;
+}
+
+.npm-scripts-section-content {
+  .script-item {
+    padding-left: 24px;
+  }
+}
+
 .script-item {
   display: flex;
   align-items: center;
@@ -56,6 +101,58 @@
 
   &.expanded {
     font-weight: 500;
+  }
+}
+
+.script-pin-btn {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 12px;
+  border-radius: 3px;
+  color: var(--text-secondary-color);
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+
+  .script-item:hover & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background-color: var(--box-border-color);
+  }
+
+  &.pinned {
+    color: var(--link-button-color);
+    opacity: 1;
+  }
+}
+
+.npm-scripts-pinned {
+  border-bottom: 1px solid var(--box-border-color);
+  background-color: var(--box-background-color);
+}
+
+.npm-scripts-pinned-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.npm-scripts-pinned-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.npm-scripts-pinned-content {
+  .script-item {
+    padding-left: 12px;
   }
 }
 
@@ -132,4 +229,16 @@
   white-space: pre-wrap;
   word-break: break-all;
   border-bottom: 1px solid var(--box-border-color);
+  user-select: text;
+  cursor: text;
+
+  .script-output-link {
+    color: var(--link-button-color);
+    cursor: pointer;
+    text-decoration: underline;
+
+    &:hover {
+      color: var(--link-button-hover-color, var(--link-button-color));
+    }
+  }
 }

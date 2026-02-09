@@ -105,3 +105,19 @@ export function getRunningScripts(): ReadonlyArray<{
     repoPath: s.repoPath,
   }))
 }
+
+/**
+ * Stop all running scripts. Called on app quit / window close.
+ */
+export function stopAllScripts(): void {
+  for (const script of runningScripts.values()) {
+    script.process.kill('SIGTERM')
+  }
+  // Force kill any remaining after 3 seconds
+  setTimeout(() => {
+    for (const script of runningScripts.values()) {
+      script.process.kill('SIGKILL')
+    }
+    runningScripts.clear()
+  }, 3000)
+}

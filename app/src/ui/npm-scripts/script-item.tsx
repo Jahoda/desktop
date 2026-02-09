@@ -6,27 +6,34 @@ interface IScriptItemProps {
   readonly command: string
   readonly isRunning: boolean
   readonly isExpanded: boolean
-  readonly onRun: (name: string) => void
-  readonly onStop: (name: string) => void
-  readonly onToggleExpand: (name: string) => void
+  readonly isPinned: boolean
+  readonly onRun: () => void
+  readonly onStop: () => void
+  readonly onToggleExpand: () => void
+  readonly onTogglePin: () => void
 }
 
 export class ScriptItem extends React.Component<IScriptItemProps> {
   private onPlayStop = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (this.props.isRunning) {
-      this.props.onStop(this.props.name)
+      this.props.onStop()
     } else {
-      this.props.onRun(this.props.name)
+      this.props.onRun()
     }
   }
 
+  private onTogglePin = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    this.props.onTogglePin()
+  }
+
   private onClick = () => {
-    this.props.onToggleExpand(this.props.name)
+    this.props.onToggleExpand()
   }
 
   public render() {
-    const { name, command, isRunning, isExpanded } = this.props
+    const { name, command, isRunning, isExpanded, isPinned } = this.props
 
     const className = classNames('script-item', {
       running: isRunning,
@@ -43,7 +50,7 @@ export class ScriptItem extends React.Component<IScriptItemProps> {
           onClick={this.onPlayStop}
           title={isRunning ? 'Stop' : 'Run'}
         >
-          {isRunning ? '■' : '▶'}
+          {isRunning ? '\u25A0' : '\u25B6'}
         </button>
         <div className="script-info">
           <span className="script-name">{name}</span>
@@ -51,6 +58,13 @@ export class ScriptItem extends React.Component<IScriptItemProps> {
             {command}
           </span>
         </div>
+        <button
+          className={classNames('script-pin-btn', { pinned: isPinned })}
+          onClick={this.onTogglePin}
+          title={isPinned ? 'Unpin' : 'Pin'}
+        >
+          {'\u2605'}
+        </button>
         {isRunning && <span className="script-running-indicator" />}
       </div>
     )

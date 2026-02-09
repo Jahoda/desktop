@@ -131,6 +131,13 @@ app.on('window-all-closed', () => {
   // the crash process window which is shown after the main window is closed.
 })
 
+app.on('will-quit', () => {
+  const { stopAllScripts } = require('../lib/npm/script-runner')
+  stopAllScripts()
+  const { destroyAllTerminals } = require('./pty-manager')
+  destroyAllTerminals()
+})
+
 process.on('uncaughtException', (error: Error) => {
   error = withSourceMappedStack(error)
   reportError(error, getExtraErrorContext())
