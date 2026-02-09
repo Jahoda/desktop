@@ -4,6 +4,8 @@
   border-top: 1px solid var(--box-border-color);
   position: relative;
   flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .terminal-resize-handle {
@@ -107,6 +109,8 @@
 
 .terminal-content {
   flex: 1;
+  min-height: 0;
+  min-width: 0;
   overflow: hidden;
   background-color: #1e1e1e;
 }
@@ -117,6 +121,7 @@
   padding: 4px;
 
   .xterm {
+    width: 100%;
     height: 100%;
   }
 

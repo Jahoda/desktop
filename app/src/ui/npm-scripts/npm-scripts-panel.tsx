@@ -29,7 +29,12 @@ interface INpmScriptsPanelState {
   readonly expandedScript: string | null
   readonly collapsedSections: Set<string>
   readonly pinnedScripts: Set<string>
+  readonly height: number
 }
+
+const MIN_HEIGHT = 80
+const DEFAULT_HEIGHT = 200
+const MAX_HEIGHT = 500
 
 function getPinnedStorageKey(repoPath: string): string {
   return `npm-pinned-scripts-${repoPath}`
@@ -48,12 +53,19 @@ export class NpmScriptsPanel extends React.Component<
       pinnedScripts: new Set(
         getStringArray(getPinnedStorageKey(props.repoPath))
       ),
+      height: DEFAULT_HEIGHT,
     }
   }
+
+  private isDragging = false
+  private startY = 0
+  private startHeight = 0
 
   public componentDidMount() {
     ipcRenderer.on('npm-script-output', this.onScriptOutput)
     ipcRenderer.on('npm-script-exit', this.onScriptExit)
+    document.addEventListener('mousemove', this.onResizeMove)
+    document.addEventListener('mouseup', this.onResizeEnd)
   }
 
   public componentDidUpdate(prevProps: INpmScriptsPanelProps) {
@@ -69,6 +81,8 @@ export class NpmScriptsPanel extends React.Component<
   public componentWillUnmount() {
     ipcRenderer.removeListener('npm-script-output', this.onScriptOutput)
     ipcRenderer.removeListener('npm-script-exit', this.onScriptExit)
+    document.removeEventListener('mousemove', this.onResizeMove)
+    document.removeEventListener('mouseup', this.onResizeEnd)
   }
 
   private onScriptOutput = (_: any, id: string, data: string) => {
@@ -163,6 +177,29 @@ export class NpmScriptsPanel extends React.Component<
       updated.add(sectionName)
     }
     this.setState({ collapsedSections: updated })
+  }
+
+  private onResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    this.isDragging = true
+    this.startY = e.clientY
+    this.startHeight = this.state.height
+  }
+
+  private onResizeMove = (e: MouseEvent) => {
+    if (!this.isDragging) {
+      return
+    }
+    const delta = this.startY - e.clientY
+    const newHeight = Math.min(
+      MAX_HEIGHT,
+      Math.max(MIN_HEIGHT, this.startHeight + delta)
+    )
+    this.setState({ height: newHeight })
+  }
+
+  private onResizeEnd = () => {
+    this.isDragging = false
   }
 
   private onTogglePin = (scriptKey: string) => {
@@ -374,11 +411,16 @@ export class NpmScriptsPanel extends React.Component<
 
   public render() {
     const { rootScripts, workspaces, manager } = this.props
+    const { height } = this.state
     const runningCount = this.getRunningCount()
     const hasWorkspaces = workspaces.length > 0
 
     return (
-      <div className="npm-scripts-panel">
+      <div className="npm-scripts-panel" style={{ height }}>
+        <div
+          className="npm-scripts-resize-handle"
+          onMouseDown={this.onResizeStart}
+        />
         <div className="npm-scripts-header">
           <span className="npm-scripts-title">
             Scripts ({manager})

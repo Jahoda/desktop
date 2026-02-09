@@ -2,8 +2,24 @@
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--box-border-color);
-  max-height: 300px;
   overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.npm-scripts-resize-handle {
+  height: 4px;
+  cursor: ns-resize;
+  background: transparent;
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+  z-index: 10;
+
+  &:hover {
+    background-color: var(--link-button-color);
+  }
 }
 
 .npm-scripts-header {

@@ -31,11 +31,17 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
   }
 
   public componentDidUpdate(prevProps: ITerminalViewProps) {
-    if (!prevProps.isActive && this.props.isActive) {
-      setTimeout(() => {
-        this.fit()
-        this.focusTerminal()
-      }, 50)
+    if (this.props.isActive) {
+      // Use rAF to ensure the element is visible after display change,
+      // then a short delay to let the layout settle before fitting
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          this.fit()
+          if (!prevProps.isActive) {
+            this.focusTerminal()
+          }
+        }, 20)
+      })
     }
   }
 
