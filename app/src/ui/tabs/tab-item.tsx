@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { ITabState } from '../../lib/app-state'
 import classNames from 'classnames'
+import { RepoIcon } from './repo-icon'
 
 interface ITabItemProps {
   readonly tab: ITabState
@@ -77,6 +78,7 @@ export class TabItem extends React.Component<ITabItemProps> {
         onDrop={this.onDrop}
         onDragEnd={this.onDragEnd}
       >
+        <RepoIcon repository={tab.repository} />
         <div className="tab-content">
           <span className="tab-name" title={repoName}>
             {repoName}
