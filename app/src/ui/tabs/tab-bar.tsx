@@ -9,6 +9,7 @@ interface ITabBarProps {
   readonly onTabClosed: (index: number) => void
   readonly onTabMoved: (fromIndex: number, toIndex: number) => void
   readonly onTabDoubleClicked?: (index: number) => void
+  readonly onAddRepository: () => void
 }
 
 interface ITabBarState {
@@ -48,10 +49,6 @@ export class TabBar extends React.Component<ITabBarProps, ITabBarState> {
   public render() {
     const { tabs, activeTabIndex } = this.props
 
-    if (tabs.length <= 1) {
-      return null
-    }
-
     return (
       <div className="tab-bar-container">
         {tabs.map((tab, index) => (
@@ -70,6 +67,14 @@ export class TabBar extends React.Component<ITabBarProps, ITabBarState> {
             onDragEnd={this.onDragEnd}
           />
         ))}
+        <button
+          className="tab-add-btn"
+          onClick={this.props.onAddRepository}
+          title="Add Repository"
+          aria-label="Add Repository"
+        >
+          +
+        </button>
       </div>
     )
   }

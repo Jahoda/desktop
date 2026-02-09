@@ -102,3 +102,57 @@
     opacity: 1;
   }
 }
+
+.repository-foldout-panel {
+  position: relative;
+  z-index: 100;
+}
+
+.repository-foldout-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 99;
+}
+
+.repository-foldout-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 300px;
+  height: 400px;
+  background-color: var(--background-color);
+  border: 1px solid var(--box-border-color);
+  border-top: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+  .repository-list {
+    height: 100%;
+    flex: 1;
+  }
+}
+
+.tab-add-btn {
+  border: none;
+  background: none;
+  color: var(--text-secondary-color);
+  cursor: pointer;
+  padding: 0 12px;
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    background-color: var(--list-item-hover-background-color);
+    color: var(--text-color);
+  }
+}

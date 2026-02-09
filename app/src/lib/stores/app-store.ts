@@ -364,6 +364,9 @@ import { getRepoHooks } from '../hooks/get-repo-hooks'
 const LastSelectedRepositoryIDKey = 'last-selected-repository-id'
 
 const RecentRepositoriesKey = 'recently-selected-repositories'
+
+const openTabsKey = 'open-tabs-repository-ids'
+const activeTabIndexKey = 'active-tab-index'
 /**
  *  maximum number of repositories shown in the "Recent" repositories group
  *  in the repository switcher dropdown
@@ -485,10 +488,10 @@ export class AppStore extends TypedBaseStore<IAppState> {
   private selectedRepository: Repository | CloningRepository | null = null
 
   /** Whether the npm scripts panel is visible */
-  private showNpmScriptsPanel: boolean = false
+  private showNpmScriptsPanel: boolean = true
 
   /** Whether the terminal panel is visible */
-  private showTerminalPanel: boolean = false
+  private showTerminalPanel: boolean = true
 
   /** Open repository tabs */
   private openTabs: ReadonlyArray<ITabState> = []
@@ -1993,6 +1996,41 @@ export class AppStore extends TypedBaseStore<IAppState> {
     this.emitUpdate()
   }
 
+  /** Save open tabs to localStorage */
+  private saveOpenTabs(): void {
+    const tabIds = this.openTabs.map(t => t.repository.id)
+    setNumberArray(openTabsKey, tabIds)
+    setNumber(activeTabIndexKey, this.activeTabIndex)
+  }
+
+  /** Restore open tabs from localStorage */
+  private restoreOpenTabs(repositories: ReadonlyArray<Repository>): void {
+    const savedTabIds = getNumberArray(openTabsKey)
+    const savedActiveIndex = getNumber(activeTabIndexKey, 0)
+
+    if (savedTabIds.length === 0) {
+      return
+    }
+
+    const restoredTabs: ITabState[] = []
+    for (const id of savedTabIds) {
+      const repo = repositories.find(r => r.id === id)
+      if (repo) {
+        restoredTabs.push({ repository: repo, branchName: null })
+      }
+    }
+
+    if (restoredTabs.length > 0) {
+      this.openTabs = restoredTabs
+      this.activeTabIndex = Math.min(savedActiveIndex, restoredTabs.length - 1)
+
+      const activeTab = this.openTabs[this.activeTabIndex]
+      if (activeTab) {
+        this._selectRepository(activeTab.repository)
+      }
+    }
+  }
+
   /** Open a repository in a new tab or switch to existing tab */
   public _openTab(repository: Repository): void {
     const existingIndex = this.openTabs.findIndex(
@@ -2008,6 +2046,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       this.activeTabIndex = this.openTabs.length - 1
     }
 
+    this.saveOpenTabs()
     this.emitUpdate()
     this._selectRepository(repository)
   }
@@ -2041,6 +2080,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       this._selectRepository(activeTab.repository)
     }
 
+    this.saveOpenTabs()
     this.emitUpdate()
   }
 
@@ -2052,6 +2092,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
     this.activeTabIndex = index
     const tab = this.openTabs[index]
+    this.saveOpenTabs()
     this.emitUpdate()
     this._selectRepository(tab.repository)
   }
@@ -2087,6 +2128,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       this.activeTabIndex++
     }
 
+    this.saveOpenTabs()
     this.emitUpdate()
   }
 
@@ -2132,6 +2174,8 @@ export class AppStore extends TypedBaseStore<IAppState> {
     } else {
       this.activeTabIndex = existingIndex
     }
+
+    this.saveOpenTabs()
   }
 
   // update the stored list of recently opened repositories
@@ -2378,6 +2422,9 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
     this.accounts = accounts
     this.repositories = repositories
+
+    // Restore saved tabs
+    this.restoreOpenTabs(repositories)
 
     this.updateRepositorySelectionAfterRepositoriesChanged()
 

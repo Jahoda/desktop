@@ -4,7 +4,7 @@ import webpack from 'webpack'
 import merge from 'webpack-merge'
 import { getReplacements } from './app-info'
 
-export const externals = ['7zip']
+export const externals = ['7zip', 'node-pty']
 
 const outputDir = 'out'
 export const replacements = getReplacements()
