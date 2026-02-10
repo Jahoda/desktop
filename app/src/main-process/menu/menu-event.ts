@@ -50,6 +50,7 @@ export type MenuEvent =
   | 'toggle-changes-filter'
   | 'toggle-npm-scripts-panel'
   | 'toggle-terminal-panel'
+  | 'toggle-claude-chat-panel'
   | 'import-from-github-desktop'
   | TestMenuEvent
 

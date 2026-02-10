@@ -202,6 +202,7 @@ import { TabBar } from './tabs/tab-bar'
 import { NpmScriptsPanel } from './npm-scripts/npm-scripts-panel'
 import { detectMonorepoScripts, IMonorepoScripts } from '../lib/npm/script-detector'
 import { TerminalPanel } from './terminal/terminal-panel'
+import { ClaudeChatPanel } from './claude-chat/claude-chat-panel'
 
 const MinuteInMilliseconds = 1000 * 60
 const HourInMilliseconds = MinuteInMilliseconds * 60
@@ -538,6 +539,8 @@ export class App extends React.Component<IAppProps, IAppState> {
         return this.props.dispatcher.toggleNpmScriptsPanel()
       case 'toggle-terminal-panel':
         return this.props.dispatcher.toggleTerminalPanel()
+      case 'toggle-claude-chat-panel':
+        return this.props.dispatcher.toggleClaudeChatPanel()
       case 'import-from-github-desktop':
         return this.props.dispatcher.showPopup({
           type: PopupType.ImportFromGitHubDesktop,
@@ -1075,6 +1078,13 @@ export class App extends React.Component<IAppProps, IAppState> {
     if (event.key === '`' && !event.shiftKey && !event.altKey) {
       event.preventDefault()
       this.props.dispatcher.toggleTerminalPanel()
+      return
+    }
+
+    // Cmd/Ctrl+Shift+I toggles Claude chat panel
+    if (event.key === 'I' && event.shiftKey && !event.altKey) {
+      event.preventDefault()
+      this.props.dispatcher.toggleClaudeChatPanel()
       return
     }
 
@@ -3080,6 +3090,37 @@ export class App extends React.Component<IAppProps, IAppState> {
     return <TerminalPanel cwd={repo.path} repoId={repo.id} />
   }
 
+  private renderClaudeChatPanel() {
+    if (!this.state.showClaudeChatPanel) {
+      return null
+    }
+
+    const repo = this.getRepository()
+    if (!repo || repo instanceof CloningRepository) {
+      return null
+    }
+
+    let branchName: string | null = null
+    const { selectedState } = this.state
+    if (
+      selectedState !== null &&
+      selectedState.type === SelectionType.Repository
+    ) {
+      const { tip } = selectedState.state.branchesState
+      if (tip.kind === TipState.Valid) {
+        branchName = tip.branch.name
+      }
+    }
+
+    return (
+      <ClaudeChatPanel
+        cwd={repo.path}
+        repoId={repo.id}
+        branchName={branchName}
+      />
+    )
+  }
+
   private renderApp() {
     return (
       <div
@@ -3090,9 +3131,14 @@ export class App extends React.Component<IAppProps, IAppState> {
         {this.renderRepositoryFoldout()}
         {this.renderToolbar()}
         {this.renderBanner()}
-        {this.renderRepository()}
-        {this.renderNpmScriptsPanel()}
-        {this.renderTerminalPanel()}
+        <div id="main-content-row">
+          <div id="main-content-column">
+            {this.renderRepository()}
+            {this.renderNpmScriptsPanel()}
+            {this.renderTerminalPanel()}
+          </div>
+          {this.renderClaudeChatPanel()}
+        </div>
         {this.renderPopups()}
         {this.renderDragElement()}
       </div>

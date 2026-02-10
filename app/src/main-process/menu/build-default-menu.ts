@@ -243,6 +243,12 @@ export function buildDefaultMenu({
         accelerator: 'CmdOrCtrl+`',
         click: emit('toggle-terminal-panel'),
       },
+      {
+        label: __DARWIN__ ? 'Toggle Claude Chat' : 'Toggle Claude &Chat',
+        id: 'toggle-claude-chat-panel',
+        accelerator: 'CmdOrCtrl+Shift+I',
+        click: emit('toggle-claude-chat-panel'),
+      },
       separator,
       {
         label: __DARWIN__ ? 'Toggle Full Screen' : 'Toggle &full screen',

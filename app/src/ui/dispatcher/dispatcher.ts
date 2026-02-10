@@ -300,6 +300,11 @@ export class Dispatcher {
     this.appStore._toggleTerminalPanel()
   }
 
+  /** Toggle the Claude chat panel */
+  public toggleClaudeChatPanel(): void {
+    this.appStore._toggleClaudeChatPanel()
+  }
+
   /** Open a repository in a new tab */
   public openTab(repository: Repository): void {
     this.appStore._openTab(repository)

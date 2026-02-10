@@ -92,6 +92,10 @@ export type RequestChannels = {
   // Terminal channels
   'pty-output': (id: string, data: string) => void
   'pty-exit': (id: string) => void
+  // Claude Chat channels
+  'claude-stream-event': (id: string, event: any) => void
+  'claude-complete': (id: string, code: number | null) => void
+  'claude-error': (id: string, error: any) => void
 }
 
 /**
@@ -154,4 +158,14 @@ export type RequestResponseChannels = {
   'pty-write': (id: string, data: string) => Promise<void>
   'pty-resize': (id: string, cols: number, rows: number) => Promise<void>
   'pty-destroy': (id: string) => Promise<void>
+  // Claude Chat
+  'claude-create-session': (cwd: string) => Promise<string>
+  'claude-send-prompt': (
+    id: string,
+    prompt: string,
+    systemPrompt?: string
+  ) => Promise<void>
+  'claude-abort': (id: string) => Promise<void>
+  'claude-destroy-session': (id: string) => Promise<void>
+  'claude-apply-code': (filePath: string, code: string) => Promise<boolean>
 }

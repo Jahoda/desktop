@@ -401,6 +401,9 @@ export interface IAppState {
   /** Whether the terminal panel is visible */
   readonly showTerminalPanel: boolean
 
+  /** Whether the Claude chat panel is visible */
+  readonly showClaudeChatPanel: boolean
+
   /** Open repository tabs */
   readonly openTabs: ReadonlyArray<ITabState>
 

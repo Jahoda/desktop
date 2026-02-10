@@ -136,6 +136,8 @@ app.on('will-quit', () => {
   stopAllScripts()
   const { destroyAllTerminals } = require('./pty-manager')
   destroyAllTerminals()
+  const { destroyAllSessions } = require('./claude-manager')
+  destroyAllSessions()
 })
 
 process.on('uncaughtException', (error: Error) => {
@@ -780,6 +782,39 @@ app.on('ready', () => {
   ipcMain.handle('pty-destroy', async (_, id) => {
     const { destroyTerminal } = require('./pty-manager')
     destroyTerminal(id)
+  })
+
+  // Claude Chat IPC handlers
+  ipcMain.handle('claude-create-session', (event, cwd) => {
+    const { createSession } = require('./claude-manager')
+    return createSession(cwd, event.sender)
+  })
+
+  ipcMain.handle('claude-send-prompt', async (_, id, prompt, systemPrompt) => {
+    const { sendPrompt } = require('./claude-manager')
+    sendPrompt(id, prompt, systemPrompt)
+  })
+
+  ipcMain.handle('claude-abort', async (_, id) => {
+    const { abortRequest } = require('./claude-manager')
+    abortRequest(id)
+  })
+
+  ipcMain.handle('claude-destroy-session', async (_, id) => {
+    const { destroySession } = require('./claude-manager')
+    destroySession(id)
+  })
+
+  ipcMain.handle('claude-apply-code', async (_, filePath, code) => {
+    const fs = require('fs')
+    const path = require('path')
+    // Ensure parent directory exists
+    const dir = path.dirname(filePath)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    fs.writeFileSync(filePath, code, 'utf-8')
+    return true
   })
 })
 

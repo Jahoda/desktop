@@ -494,6 +494,9 @@ export class AppStore extends TypedBaseStore<IAppState> {
   /** Whether the terminal panel is visible */
   private showTerminalPanel: boolean = true
 
+  /** Whether the Claude chat panel is visible */
+  private showClaudeChatPanel: boolean = false
+
   /** Open repository tabs */
   private openTabs: ReadonlyArray<ITabState> = []
 
@@ -1151,6 +1154,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       showChangesFilter: this.showChangesFilter,
       showNpmScriptsPanel: this.showNpmScriptsPanel,
       showTerminalPanel: this.showTerminalPanel,
+      showClaudeChatPanel: this.showClaudeChatPanel,
       openTabs: this.openTabs,
       activeTabIndex: this.activeTabIndex,
     }
@@ -1994,6 +1998,12 @@ export class AppStore extends TypedBaseStore<IAppState> {
   /** Toggle the terminal panel visibility */
   public _toggleTerminalPanel(): void {
     this.showTerminalPanel = !this.showTerminalPanel
+    this.emitUpdate()
+  }
+
+  /** Toggle the Claude chat panel visibility */
+  public _toggleClaudeChatPanel(): void {
+    this.showClaudeChatPanel = !this.showClaudeChatPanel
     this.emitUpdate()
   }
 
