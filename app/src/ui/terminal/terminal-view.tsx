@@ -41,6 +41,12 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
 
   public componentDidUpdate(prevProps: ITerminalViewProps) {
     if (this.props.isActive) {
+      // The container transitions from display:none to block when
+      // switching tabs, repos, or uncollapsing the panel.  A single
+      // fit() right away often measures stale / zero dimensions, so we
+      // wait one rAF + a short timeout for the layout to settle, then
+      // fit, refresh all rows, and schedule a second fit as a safety net
+      // in case the first one still saw an incomplete layout.
       requestAnimationFrame(() => {
         if (this.disposed) {
           return
@@ -50,9 +56,20 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
             return
           }
           this.fit()
+          if (this.terminal) {
+            this.terminal.refresh(0, this.terminal.rows - 1)
+          }
           if (!prevProps.isActive) {
             this.focusTerminal()
           }
+          // Second fit – catches cases where the first rAF measured
+          // the container before a reflow fully completed (e.g. after
+          // uncollapsing the panel).
+          setTimeout(() => {
+            if (!this.disposed) {
+              this.fit()
+            }
+          }, 100)
         }, 20)
       })
     }
@@ -165,12 +182,20 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
       this.setupInputHandler()
       this.setupResizeObserver(container)
 
-      this.fit()
-      setTimeout(() => {
-        if (!this.disposed) {
-          this.focusTerminal()
+      // Defer initial fit to allow the DOM layout to settle –
+      // calling fit() synchronously here can measure a zero-width
+      // container and resize the PTY to ~2 columns.
+      requestAnimationFrame(() => {
+        if (this.disposed) {
+          return
         }
-      }, 100)
+        this.fit()
+        setTimeout(() => {
+          if (!this.disposed) {
+            this.focusTerminal()
+          }
+        }, 100)
+      })
     } catch (err) {
       console.error('[terminal-view] Failed to init xterm:', err)
       container.textContent =
@@ -448,16 +473,20 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
       return
     }
     try {
-      this.fitAddon.fit()
       const dims = this.fitAddon.proposeDimensions()
-      if (dims) {
-        ipcRenderer.invoke(
-          'pty-resize',
-          this.props.terminalId,
-          dims.cols,
-          dims.rows
-        )
+      // Guard against fitting when the container has no usable size yet –
+      // this happens when the terminal is hidden or the layout hasn't
+      // settled, and would resize the PTY to a tiny column count.
+      if (!dims || dims.cols < 10 || dims.rows < 2) {
+        return
       }
+      this.fitAddon.fit()
+      ipcRenderer.invoke(
+        'pty-resize',
+        this.props.terminalId,
+        dims.cols,
+        dims.rows
+      )
     } catch {
       // ignore fit errors
     }
