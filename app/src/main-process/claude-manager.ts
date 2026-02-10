@@ -80,7 +80,7 @@ export function sendPrompt(
   }
 
   const env = getShellEnv()
-  const args = ['-p', '--output-format', 'stream-json', '--verbose']
+  const args = ['-p', '--output-format', 'stream-json']
 
   if (session.claudeSessionId) {
     args.push('--resume', session.claudeSessionId)
@@ -158,6 +158,9 @@ export function sendPrompt(
   proc.stderr?.on('data', (data: Buffer) => {
     const text = data.toString()
     console.error(`[claude-manager] ${id} stderr:`, text)
+    if (!session.webContents.isDestroyed()) {
+      session.webContents.send('claude-stderr', id, text)
+    }
   })
 
   proc.on('error', (err: Error) => {

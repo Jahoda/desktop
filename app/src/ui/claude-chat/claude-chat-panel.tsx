@@ -12,13 +12,13 @@ interface IClaudeChatPanelProps {
 interface IClaudeChatPanelState {
   readonly width: number
   readonly collapsed: boolean
-  readonly isStreaming: boolean
 }
 
 /** Per-repo chat state preserved across component re-mounts */
 interface IRepoChatState {
   messages: IChatMessage[]
   sessionId: string | null
+  isStreaming: boolean
 }
 
 const MIN_WIDTH = 280
@@ -38,6 +38,9 @@ export class ClaudeChatPanel extends React.Component<
   /** Track the current streaming text for the assistant message being built */
   private static streamingText = new Map<number, string>()
 
+  /** Buffer stderr output per repo so we can show it on failure */
+  private static stderrBuffer = new Map<number, string>()
+
   private isDragging = false
   private startX = 0
   private startWidth = 0
@@ -48,7 +51,6 @@ export class ClaudeChatPanel extends React.Component<
     this.state = {
       width: DEFAULT_WIDTH,
       collapsed: false,
-      isStreaming: false,
     }
   }
 
@@ -56,6 +58,7 @@ export class ClaudeChatPanel extends React.Component<
     ipcRenderer.on('claude-stream-event', this.onStreamEvent)
     ipcRenderer.on('claude-complete', this.onComplete)
     ipcRenderer.on('claude-error', this.onError)
+    ipcRenderer.on('claude-stderr', this.onStderr)
 
     this.ensureSession()
 
@@ -67,6 +70,7 @@ export class ClaudeChatPanel extends React.Component<
     ipcRenderer.removeListener('claude-stream-event', this.onStreamEvent)
     ipcRenderer.removeListener('claude-complete', this.onComplete)
     ipcRenderer.removeListener('claude-error', this.onError)
+    ipcRenderer.removeListener('claude-stderr', this.onStderr)
 
     document.removeEventListener('mousemove', this.onMouseMove)
     document.removeEventListener('mouseup', this.onMouseUp)
@@ -91,10 +95,20 @@ export class ClaudeChatPanel extends React.Component<
     this.handleError(sessionId, error)
   }
 
+  private onStderr = (_: any, sessionId: string, text: string) => {
+    const repoId = this.findRepoIdForSession(sessionId)
+    if (repoId === null) {
+      return
+    }
+    const existing = ClaudeChatPanel.stderrBuffer.get(repoId) || ''
+    ClaudeChatPanel.stderrBuffer.set(repoId, existing + text)
+  }
+
   private getRepoChatState(): IRepoChatState {
     return ClaudeChatPanel.repoChatState.get(this.props.repoId) || {
       messages: [],
       sessionId: null,
+      isStreaming: false,
     }
   }
 
@@ -192,8 +206,36 @@ export class ClaudeChatPanel extends React.Component<
 
     ClaudeChatPanel.streamingText.delete(repoId)
 
+    const state = ClaudeChatPanel.repoChatState.get(repoId)
+    if (state) {
+      // If process completed without producing any assistant message,
+      // check stderr messages and show a fallback error
+      const lastMsg = state.messages[state.messages.length - 1]
+      if (lastMsg && lastMsg.role === 'user') {
+        const stderrText = ClaudeChatPanel.stderrBuffer.get(repoId)
+        const errorContent = stderrText
+          ? `**Error:** ${stderrText}`
+          : '**Error:** No response from Claude CLI. Make sure it is installed and authenticated (`claude` in your terminal).'
+        ClaudeChatPanel.repoChatState.set(repoId, {
+          ...state,
+          isStreaming: false,
+          messages: [
+            ...state.messages,
+            { role: 'assistant', content: errorContent },
+          ],
+        })
+      } else {
+        ClaudeChatPanel.repoChatState.set(repoId, {
+          ...state,
+          isStreaming: false,
+        })
+      }
+    }
+
+    ClaudeChatPanel.stderrBuffer.delete(repoId)
+
     if (repoId === this.props.repoId) {
-      this.setState({ isStreaming: false })
+      this.forceUpdate()
     }
   }
 
@@ -213,12 +255,16 @@ export class ClaudeChatPanel extends React.Component<
       ...state.messages,
       { role: 'assistant' as const, content: `**Error:** ${errorMessage}` },
     ]
-    ClaudeChatPanel.repoChatState.set(repoId, { ...state, messages })
+    ClaudeChatPanel.repoChatState.set(repoId, {
+      ...state,
+      messages,
+      isStreaming: false,
+    })
 
     ClaudeChatPanel.streamingText.delete(repoId)
+    ClaudeChatPanel.stderrBuffer.delete(repoId)
 
     if (repoId === this.props.repoId) {
-      this.setState({ isStreaming: false })
       this.forceUpdate(() => this.scrollToBottom())
     }
   }
@@ -242,8 +288,7 @@ export class ClaudeChatPanel extends React.Component<
         images: imagePaths && imagePaths.length > 0 ? imagePaths : undefined,
       },
     ]
-    this.setRepoChatState({ ...chatState, messages })
-    this.setState({ isStreaming: true })
+    this.setRepoChatState({ ...chatState, messages, isStreaming: true })
 
     // Build system prompt with repo context
     const systemPrompt = this.buildSystemPrompt()
@@ -257,7 +302,7 @@ export class ClaudeChatPanel extends React.Component<
         imagePaths
       )
     } catch (err: any) {
-      this.handleError(chatState.sessionId, {
+      this.handleError(chatState.sessionId!, {
         message: err?.message || 'Failed to send prompt',
       })
     }
@@ -281,7 +326,7 @@ export class ClaudeChatPanel extends React.Component<
     if (chatState.sessionId) {
       await ipcRenderer.invoke('claude-abort', chatState.sessionId)
     }
-    this.setState({ isStreaming: false })
+    this.setRepoChatState({ ...chatState, isStreaming: false })
   }
 
   private onToggleCollapse = () => {
@@ -318,9 +363,9 @@ export class ClaudeChatPanel extends React.Component<
   }
 
   public render() {
-    const { width, collapsed, isStreaming } = this.state
+    const { width, collapsed } = this.state
     const chatState = this.getRepoChatState()
-    const { messages } = chatState
+    const { messages, isStreaming } = chatState
 
     const panelClass = collapsed
       ? 'claude-chat-panel collapsed'
