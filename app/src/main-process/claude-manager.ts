@@ -68,11 +68,12 @@ export function sendPrompt(
   const session = sessions.get(id)
   if (!session) {
     console.error('[claude-manager] sendPrompt: no session for', id)
-    return
+    throw new Error(`No session found for id=${id}`)
   }
 
   // Kill any existing process for this session
   if (session.process) {
+    console.log(`[claude-manager] ${id} killing existing process`)
     try {
       session.process.kill('SIGTERM')
     } catch {}
@@ -98,7 +99,11 @@ export function sendPrompt(
 
   args.push(prompt)
 
-  console.log(`[claude-manager] Spawning claude for session ${id}`)
+  console.log(
+    `[claude-manager] Spawning: claude ${args.map(a => (a.length > 80 ? a.slice(0, 80) + '...' : a)).join(' ')}`
+  )
+  console.log(`[claude-manager] ${id} cwd=${session.cwd}`)
+  console.log(`[claude-manager] ${id} PATH=${env.PATH}`)
 
   let proc: ChildProcess
   try {
@@ -108,6 +113,7 @@ export function sendPrompt(
       stdio: ['pipe', 'pipe', 'pipe'],
     })
   } catch (err: any) {
+    console.error(`[claude-manager] ${id} spawn threw:`, err)
     if (!session.webContents.isDestroyed()) {
       session.webContents.send('claude-error', id, {
         type: 'spawn-error',
@@ -121,15 +127,27 @@ export function sendPrompt(
   }
 
   session.process = proc
+  console.log(`[claude-manager] ${id} process spawned, pid=${proc.pid}`)
 
   let lineBuffer = ''
+  let stdoutChunks = 0
+  let eventCount = 0
 
   proc.stdout?.on('data', (data: Buffer) => {
+    stdoutChunks++
+    const raw = data.toString()
+    if (stdoutChunks <= 3) {
+      console.log(
+        `[claude-manager] ${id} stdout chunk #${stdoutChunks} (${raw.length} bytes): ${raw.slice(0, 200)}`
+      )
+    }
+
     if (session.webContents.isDestroyed()) {
+      console.warn(`[claude-manager] ${id} webContents destroyed, dropping stdout`)
       return
     }
 
-    lineBuffer += data.toString()
+    lineBuffer += raw
     const lines = lineBuffer.split('\n')
     // Keep the last (potentially incomplete) line in the buffer
     lineBuffer = lines.pop() || ''
@@ -142,15 +160,23 @@ export function sendPrompt(
 
       try {
         const event = JSON.parse(trimmed)
+        eventCount++
+
+        if (eventCount <= 5) {
+          console.log(`[claude-manager] ${id} event #${eventCount}: type=${event.type}`)
+        }
 
         // Extract session_id from result events for --resume
         if (event.type === 'result' && event.session_id) {
           session.claudeSessionId = event.session_id
+          console.log(`[claude-manager] ${id} got claude session: ${event.session_id}`)
         }
 
         session.webContents.send('claude-stream-event', id, event)
       } catch {
-        // Not valid JSON, ignore partial lines
+        console.warn(
+          `[claude-manager] ${id} non-JSON stdout line: ${trimmed.slice(0, 120)}`
+        )
       }
     }
   })
@@ -173,11 +199,17 @@ export function sendPrompt(
             ? 'Claude CLI not found. Please install it with: npm install -g @anthropic-ai/claude-code'
             : `Claude process error: ${err.message}`,
       })
+    } else {
+      console.warn(`[claude-manager] ${id} webContents destroyed on error`)
     }
   })
 
   proc.on('exit', (code: number | null) => {
-    console.log(`[claude-manager] ${id} process exited with code ${code}`)
+    console.log(
+      `[claude-manager] ${id} process exited code=${code}, ` +
+        `stdoutChunks=${stdoutChunks}, events=${eventCount}, ` +
+        `webContentsDestroyed=${session.webContents.isDestroyed()}`
+    )
     session.process = null
 
     // Process any remaining buffer
@@ -188,12 +220,19 @@ export function sendPrompt(
           session.claudeSessionId = event.session_id
         }
         session.webContents.send('claude-stream-event', id, event)
-      } catch {}
+      } catch {
+        console.warn(
+          `[claude-manager] ${id} remaining buffer not valid JSON: ${lineBuffer.trim().slice(0, 120)}`
+        )
+      }
     }
     lineBuffer = ''
 
     if (!session.webContents.isDestroyed()) {
+      console.log(`[claude-manager] ${id} sending claude-complete`)
       session.webContents.send('claude-complete', id, code)
+    } else {
+      console.warn(`[claude-manager] ${id} webContents destroyed, cannot send claude-complete`)
     }
   })
 }

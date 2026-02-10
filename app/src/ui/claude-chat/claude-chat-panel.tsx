@@ -74,17 +74,24 @@ export class ClaudeChatPanel extends React.Component<
       return
     }
     ClaudeChatPanel.listenersRegistered = true
+    console.log('[claude-chat] Global IPC listeners registered')
 
     ipcRenderer.on(
       'claude-stream-event',
       (_: any, sessionId: string, event: any) => {
+        console.log(
+          `[claude-chat] stream-event: session=${sessionId}, type=${event?.type}`
+        )
         ClaudeChatPanel.handleStreamEvent(sessionId, event)
       }
     )
 
     ipcRenderer.on(
       'claude-complete',
-      (_: any, sessionId: string, _code: number | null) => {
+      (_: any, sessionId: string, code: number | null) => {
+        console.log(
+          `[claude-chat] complete: session=${sessionId}, code=${code}`
+        )
         ClaudeChatPanel.handleComplete(sessionId)
       }
     )
@@ -92,6 +99,10 @@ export class ClaudeChatPanel extends React.Component<
     ipcRenderer.on(
       'claude-error',
       (_: any, sessionId: string, error: any) => {
+        console.error(
+          `[claude-chat] error: session=${sessionId}`,
+          error
+        )
         ClaudeChatPanel.handleError(sessionId, error)
       }
     )
@@ -99,6 +110,7 @@ export class ClaudeChatPanel extends React.Component<
     ipcRenderer.on(
       'claude-stderr',
       (_: any, sessionId: string, text: string) => {
+        console.warn(`[claude-chat] stderr: session=${sessionId}: ${text}`)
         ClaudeChatPanel.handleStderr(sessionId, text)
       }
     )
@@ -111,6 +123,10 @@ export class ClaudeChatPanel extends React.Component<
         return repoId
       }
     }
+    console.warn(
+      `[claude-chat] findRepoIdForSession: no repo for session=${sessionId}, ` +
+        `map has: ${[...ClaudeChatPanel.repoChatState.entries()].map(([k, v]) => `${k}=>${v.sessionId}`).join(', ')}`
+    )
     return null
   }
 
@@ -187,6 +203,9 @@ export class ClaudeChatPanel extends React.Component<
   private static handleComplete(sessionId: string) {
     const repoId = ClaudeChatPanel.findRepoIdForSession(sessionId)
     if (repoId === null) {
+      console.error(
+        `[claude-chat] handleComplete: cannot find repo for session=${sessionId}, isStreaming will be stuck!`
+      )
       return
     }
 
@@ -199,6 +218,9 @@ export class ClaudeChatPanel extends React.Component<
       const lastMsg = state.messages[state.messages.length - 1]
       if (lastMsg && lastMsg.role === 'user') {
         const stderrText = ClaudeChatPanel.stderrBuffer.get(repoId)
+        console.log(
+          `[claude-chat] handleComplete: no assistant response for repo=${repoId}, stderr=${stderrText?.slice(0, 200)}`
+        )
         const errorContent = stderrText
           ? `**Error:** ${stderrText}`
           : '**Error:** No response from Claude CLI. Make sure it is installed and authenticated (`claude` in your terminal).'
@@ -211,6 +233,9 @@ export class ClaudeChatPanel extends React.Component<
           ],
         })
       } else {
+        console.log(
+          `[claude-chat] handleComplete: repo=${repoId} streaming done, lastMsg.role=${lastMsg?.role}`
+        )
         ClaudeChatPanel.repoChatState.set(repoId, {
           ...state,
           isStreaming: false,
@@ -300,9 +325,15 @@ export class ClaudeChatPanel extends React.Component<
   private async ensureSession() {
     const chatState = this.getRepoChatState()
     if (!chatState.sessionId) {
+      console.log(
+        `[claude-chat] ensureSession: creating session for repo=${this.props.repoId}, cwd=${this.props.cwd}`
+      )
       const sessionId: string = await ipcRenderer.invoke(
         'claude-create-session',
         this.props.cwd
+      )
+      console.log(
+        `[claude-chat] ensureSession: repo=${this.props.repoId} => session=${sessionId}`
       )
       this.setRepoChatState({ ...chatState, sessionId })
     }
@@ -315,8 +346,15 @@ export class ClaudeChatPanel extends React.Component<
   private onSend = async (message: string, imagePaths?: string[]) => {
     const chatState = this.getRepoChatState()
     if (!chatState.sessionId) {
+      console.warn('[claude-chat] onSend: no sessionId, ignoring')
       return
     }
+
+    console.log(
+      `[claude-chat] onSend: session=${chatState.sessionId}, repo=${this.props.repoId}, ` +
+        `msgLen=${message.length}, images=${imagePaths?.length ?? 0}, ` +
+        `existingMessages=${chatState.messages.length}`
+    )
 
     // Add user message
     const messages: IChatMessage[] = [
@@ -340,7 +378,9 @@ export class ClaudeChatPanel extends React.Component<
         chatState.messages.length === 0 ? systemPrompt : undefined,
         imagePaths
       )
+      console.log(`[claude-chat] onSend: IPC invoke resolved for session=${chatState.sessionId}`)
     } catch (err: any) {
+      console.error(`[claude-chat] onSend: IPC invoke rejected:`, err)
       ClaudeChatPanel.handleError(chatState.sessionId!, {
         message: err?.message || 'Failed to send prompt',
       })
