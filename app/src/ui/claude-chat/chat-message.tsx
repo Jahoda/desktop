@@ -6,6 +6,7 @@ import { CodeBlock } from './code-block'
 export interface IChatMessage {
   readonly role: 'user' | 'assistant'
   readonly content: string
+  readonly images?: string[]
 }
 
 interface IChatMessageProps {
@@ -142,7 +143,23 @@ export class ChatMessage extends React.Component<IChatMessageProps> {
         </div>
         <div className="claude-chat-message-content">
           {isUser ? (
-            <div className="claude-chat-user-text">{message.content}</div>
+            <>
+              {message.images && message.images.length > 0 && (
+                <div className="claude-chat-user-images">
+                  {message.images.map((imgPath, j) => (
+                    <img
+                      key={j}
+                      src={`file://${imgPath}`}
+                      className="claude-chat-user-image"
+                      alt="Pasted image"
+                    />
+                  ))}
+                </div>
+              )}
+              {message.content && (
+                <div className="claude-chat-user-text">{message.content}</div>
+              )}
+            </>
           ) : (
             this.renderAssistantContent()
           )}

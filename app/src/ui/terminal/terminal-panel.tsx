@@ -12,11 +12,13 @@ interface ITerminalPanelProps {
 interface IRepoTerminals {
   tabs: ITerminalTab[]
   activeTabId: string | null
+  height: number
+  collapsed: boolean
 }
 
 interface ITerminalPanelState {
-  readonly height: number
-  readonly collapsed: boolean
+  /** Dummy counter to trigger re-renders when per-repo state changes */
+  readonly tick: number
 }
 
 const MIN_HEIGHT = 100
@@ -43,10 +45,7 @@ export class TerminalPanel extends React.Component<
 
   public constructor(props: ITerminalPanelProps) {
     super(props)
-    this.state = {
-      height: DEFAULT_HEIGHT,
-      collapsed: false,
-    }
+    this.state = { tick: 0 }
   }
 
   public componentDidMount() {
@@ -70,12 +69,14 @@ export class TerminalPanel extends React.Component<
     return TerminalPanel.repoTerminals.get(this.props.repoId) || {
       tabs: [],
       activeTabId: null,
+      height: DEFAULT_HEIGHT,
+      collapsed: false,
     }
   }
 
   private setRepoState(state: IRepoTerminals) {
     TerminalPanel.repoTerminals.set(this.props.repoId, state)
-    this.forceUpdate()
+    this.setState(prev => ({ tick: prev.tick + 1 }))
   }
 
   private ensureTerminalForRepo() {
@@ -97,6 +98,7 @@ export class TerminalPanel extends React.Component<
     }
 
     this.setRepoState({
+      ...state,
       tabs: [...state.tabs, newTab],
       activeTabId: id,
     })
@@ -119,25 +121,27 @@ export class TerminalPanel extends React.Component<
     }
 
     if (tabs.length === 0) {
-      this.setRepoState({ tabs: [], activeTabId: null })
+      this.setRepoState({ ...state, tabs: [], activeTabId: null })
       this.createNewTerminal()
     } else {
-      this.setRepoState({ tabs, activeTabId })
+      this.setRepoState({ ...state, tabs, activeTabId })
     }
   }
 
   private onToggleCollapse = () => {
-    this.setState(prev => ({ collapsed: !prev.collapsed }))
+    const state = this.getRepoState()
+    this.setRepoState({ ...state, collapsed: !state.collapsed })
   }
 
   private onResizeStart = (e: React.MouseEvent) => {
-    if (this.state.collapsed) {
+    const state = this.getRepoState()
+    if (state.collapsed) {
       return
     }
     e.preventDefault()
     this.isDragging = true
     this.startY = e.clientY
-    this.startHeight = this.state.height
+    this.startHeight = state.height
   }
 
   private onMouseMove = (e: MouseEvent) => {
@@ -150,7 +154,8 @@ export class TerminalPanel extends React.Component<
       MAX_HEIGHT,
       Math.max(MIN_HEIGHT, this.startHeight + delta)
     )
-    this.setState({ height: newHeight })
+    const state = this.getRepoState()
+    this.setRepoState({ ...state, height: newHeight })
   }
 
   private onMouseUp = () => {
@@ -158,9 +163,8 @@ export class TerminalPanel extends React.Component<
   }
 
   public render() {
-    const { height, collapsed } = this.state
     const repoState = this.getRepoState()
-    const { tabs, activeTabId } = repoState
+    const { tabs, activeTabId, height, collapsed } = repoState
 
     // Collect all terminal tabs across all repos so we can render
     // them all (hidden) to keep PTY connections alive

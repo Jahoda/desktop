@@ -11,6 +11,8 @@ interface IScriptItemProps {
   readonly onStop: () => void
   readonly onToggleExpand: () => void
   readonly onTogglePin: () => void
+  /** Workspace/package name shown for pinned scripts in monorepo */
+  readonly packageLabel?: string
 }
 
 export class ScriptItem extends React.Component<IScriptItemProps> {
@@ -33,7 +35,8 @@ export class ScriptItem extends React.Component<IScriptItemProps> {
   }
 
   public render() {
-    const { name, command, isRunning, isExpanded, isPinned } = this.props
+    const { name, command, isRunning, isExpanded, isPinned, packageLabel } =
+      this.props
 
     const className = classNames('script-item', {
       running: isRunning,
@@ -53,7 +56,12 @@ export class ScriptItem extends React.Component<IScriptItemProps> {
           {isRunning ? '\u25A0' : '\u25B6'}
         </button>
         <div className="script-info">
-          <span className="script-name">{name}</span>
+          <span className="script-name">
+            {packageLabel && (
+              <span className="script-package-label">{packageLabel}/</span>
+            )}
+            {name}
+          </span>
           <span className="script-command" title={command}>
             {command}
           </span>

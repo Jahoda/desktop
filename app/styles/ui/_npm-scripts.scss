@@ -240,6 +240,11 @@
   text-overflow: ellipsis;
 }
 
+.script-package-label {
+  color: var(--text-secondary-color);
+  font-weight: normal;
+}
+
 .script-command {
   font-size: 10px;
   color: var(--text-secondary-color);

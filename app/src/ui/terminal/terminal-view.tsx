@@ -184,17 +184,27 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
 
       // Defer initial fit to allow the DOM layout to settle –
       // calling fit() synchronously here can measure a zero-width
-      // container and resize the PTY to ~2 columns.
+      // container and resize the PTY to a tiny column count.
+      // Use rAF + short timeout (same approach as componentDidUpdate)
+      // to give flex layout time to resolve, then fit twice for safety.
       requestAnimationFrame(() => {
         if (this.disposed) {
           return
         }
-        this.fit()
         setTimeout(() => {
-          if (!this.disposed) {
-            this.focusTerminal()
+          if (this.disposed) {
+            return
           }
-        }, 100)
+          this.fit()
+          this.focusTerminal()
+          // Second fit – catches cases where the first measurement
+          // happened before a reflow fully completed.
+          setTimeout(() => {
+            if (!this.disposed) {
+              this.fit()
+            }
+          }, 100)
+        }, 20)
       })
     } catch (err) {
       console.error('[terminal-view] Failed to init xterm:', err)
@@ -273,13 +283,10 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
         return true
       }
 
-      // Cmd+V: paste from clipboard
+      // Cmd+V: let xterm handle paste natively via its onData handler
+      // (returning true allows the browser paste event to propagate to xterm)
       if (isMeta && e.key === 'v') {
-        const text = clipboard.readText()
-        if (text) {
-          ipcRenderer.invoke('pty-write', this.props.terminalId, text)
-        }
-        return false
+        return true
       }
 
       // Cmd+A: select all terminal content

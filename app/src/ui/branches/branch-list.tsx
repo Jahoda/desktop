@@ -132,6 +132,9 @@ interface IBranchListProps {
 
   /** Optional: Callback for if delete context menu should exist */
   readonly onDeleteBranch?: (branchName: string) => void
+
+  /** Optional: Callback to open a branch in a new worktree workspace */
+  readonly onOpenWorktree?: (branchName: string) => void
 }
 
 interface IBranchListState {
@@ -278,9 +281,13 @@ export class BranchList extends React.Component<
   ) => {
     event.preventDefault()
 
-    const { onRenameBranch, onDeleteBranch } = this.props
+    const { onRenameBranch, onDeleteBranch, onOpenWorktree } = this.props
 
-    if (onRenameBranch === undefined && onDeleteBranch === undefined) {
+    if (
+      onRenameBranch === undefined &&
+      onDeleteBranch === undefined &&
+      onOpenWorktree === undefined
+    ) {
       return
     }
 
@@ -292,6 +299,7 @@ export class BranchList extends React.Component<
       isLocal,
       onRenameBranch,
       onDeleteBranch,
+      onOpenWorktree,
     })
 
     showContextualMenu(items)

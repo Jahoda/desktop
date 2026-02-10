@@ -8,6 +8,7 @@ interface IBranchContextMenuConfig {
   onViewBranchOnGitHub?: () => void
   onViewPullRequestOnGitHub?: () => void
   onDeleteBranch?: (branchName: string) => void
+  onOpenWorktree?: (branchName: string) => void
 }
 
 export function generateBranchContextMenuItems(
@@ -20,6 +21,7 @@ export function generateBranchContextMenuItems(
     onViewBranchOnGitHub,
     onViewPullRequestOnGitHub,
     onDeleteBranch,
+    onOpenWorktree,
   } = config
   const items = new Array<IMenuItem>()
 
@@ -35,6 +37,13 @@ export function generateBranchContextMenuItems(
     label: __DARWIN__ ? 'Copy Branch Name' : 'Copy branch name',
     action: () => clipboard.writeText(name),
   })
+
+  if (onOpenWorktree !== undefined) {
+    items.push({
+      label: 'Open in New Workspace',
+      action: () => onOpenWorktree(name),
+    })
+  }
 
   if (onViewBranchOnGitHub !== undefined) {
     items.push({

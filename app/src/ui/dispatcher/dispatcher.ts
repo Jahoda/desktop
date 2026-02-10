@@ -310,6 +310,17 @@ export class Dispatcher {
     this.appStore._openTab(repository)
   }
 
+  /**
+   * Create a git worktree for the given branch and open it in a new tab.
+   * The worktree is placed in a sibling directory of the repository.
+   */
+  public async createWorktreeForBranch(
+    repository: Repository,
+    branchName: string
+  ): Promise<void> {
+    return this.appStore._createWorktreeForBranch(repository, branchName)
+  }
+
   /** Close a tab by index */
   public closeTab(index: number): void {
     this.appStore._closeTab(index)

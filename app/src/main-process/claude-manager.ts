@@ -62,7 +62,8 @@ export function createSession(cwd: string, webContents: WebContents): string {
 export function sendPrompt(
   id: string,
   prompt: string,
-  systemPrompt?: string
+  systemPrompt?: string,
+  imagePaths?: string[]
 ): void {
   const session = sessions.get(id)
   if (!session) {
@@ -87,6 +88,12 @@ export function sendPrompt(
 
   if (systemPrompt) {
     args.push('--system-prompt', systemPrompt)
+  }
+
+  if (imagePaths && imagePaths.length > 0) {
+    for (const imgPath of imagePaths) {
+      args.push('--image', imgPath)
+    }
   }
 
   args.push(prompt)

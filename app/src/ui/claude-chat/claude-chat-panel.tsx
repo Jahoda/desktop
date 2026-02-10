@@ -25,8 +25,6 @@ const MIN_WIDTH = 280
 const DEFAULT_WIDTH = 400
 const MAX_WIDTH = 800
 
-let globalListenersRegistered = false
-
 /**
  * Claude Chat panel that appears on the right side of the app.
  * Preserves chat state per-repo in a static Map.
@@ -55,7 +53,10 @@ export class ClaudeChatPanel extends React.Component<
   }
 
   public componentDidMount() {
-    this.ensureGlobalListeners()
+    ipcRenderer.on('claude-stream-event', this.onStreamEvent)
+    ipcRenderer.on('claude-complete', this.onComplete)
+    ipcRenderer.on('claude-error', this.onError)
+
     this.ensureSession()
 
     document.addEventListener('mousemove', this.onMouseMove)
@@ -63,6 +64,10 @@ export class ClaudeChatPanel extends React.Component<
   }
 
   public componentWillUnmount() {
+    ipcRenderer.removeListener('claude-stream-event', this.onStreamEvent)
+    ipcRenderer.removeListener('claude-complete', this.onComplete)
+    ipcRenderer.removeListener('claude-error', this.onError)
+
     document.removeEventListener('mousemove', this.onMouseMove)
     document.removeEventListener('mouseup', this.onMouseUp)
   }
@@ -74,32 +79,16 @@ export class ClaudeChatPanel extends React.Component<
     }
   }
 
-  private ensureGlobalListeners() {
-    if (globalListenersRegistered) {
-      return
-    }
-    globalListenersRegistered = true
+  private onStreamEvent = (_: any, sessionId: string, event: any) => {
+    this.handleStreamEvent(sessionId, event)
+  }
 
-    ipcRenderer.on(
-      'claude-stream-event',
-      (_: any, sessionId: string, event: any) => {
-        this.handleStreamEvent(sessionId, event)
-      }
-    )
+  private onComplete = (_: any, sessionId: string, _code: number | null) => {
+    this.handleComplete(sessionId)
+  }
 
-    ipcRenderer.on(
-      'claude-complete',
-      (_: any, sessionId: string, _code: number | null) => {
-        this.handleComplete(sessionId)
-      }
-    )
-
-    ipcRenderer.on(
-      'claude-error',
-      (_: any, sessionId: string, error: any) => {
-        this.handleError(sessionId, error)
-      }
-    )
+  private onError = (_: any, sessionId: string, error: any) => {
+    this.handleError(sessionId, error)
   }
 
   private getRepoChatState(): IRepoChatState {
@@ -238,16 +227,20 @@ export class ClaudeChatPanel extends React.Component<
     this.messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  private onSend = async (message: string) => {
+  private onSend = async (message: string, imagePaths?: string[]) => {
     const chatState = this.getRepoChatState()
     if (!chatState.sessionId) {
       return
     }
 
     // Add user message
-    const messages = [
+    const messages: IChatMessage[] = [
       ...chatState.messages,
-      { role: 'user' as const, content: message },
+      {
+        role: 'user' as const,
+        content: message,
+        images: imagePaths && imagePaths.length > 0 ? imagePaths : undefined,
+      },
     ]
     this.setRepoChatState({ ...chatState, messages })
     this.setState({ isStreaming: true })
@@ -255,12 +248,19 @@ export class ClaudeChatPanel extends React.Component<
     // Build system prompt with repo context
     const systemPrompt = this.buildSystemPrompt()
 
-    await ipcRenderer.invoke(
-      'claude-send-prompt',
-      chatState.sessionId,
-      message,
-      chatState.messages.length === 0 ? systemPrompt : undefined
-    )
+    try {
+      await ipcRenderer.invoke(
+        'claude-send-prompt',
+        chatState.sessionId,
+        message,
+        chatState.messages.length === 0 ? systemPrompt : undefined,
+        imagePaths
+      )
+    } catch (err: any) {
+      this.handleError(chatState.sessionId, {
+        message: err?.message || 'Failed to send prompt',
+      })
+    }
 
     this.scrollToBottom()
   }

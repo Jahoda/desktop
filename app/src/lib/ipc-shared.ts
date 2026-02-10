@@ -163,9 +163,11 @@ export type RequestResponseChannels = {
   'claude-send-prompt': (
     id: string,
     prompt: string,
-    systemPrompt?: string
+    systemPrompt?: string,
+    imagePaths?: string[]
   ) => Promise<void>
   'claude-abort': (id: string) => Promise<void>
   'claude-destroy-session': (id: string) => Promise<void>
   'claude-apply-code': (filePath: string, code: string) => Promise<boolean>
+  'claude-save-image': (base64Data: string) => Promise<string>
 }

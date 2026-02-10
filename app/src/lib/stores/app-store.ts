@@ -6985,6 +6985,32 @@ export class AppStore extends TypedBaseStore<IAppState> {
     return addedRepositories
   }
 
+  /**
+   * Create a git worktree for the given branch and open it as a new
+   * repository tab.
+   */
+  public async _createWorktreeForBranch(
+    repository: Repository,
+    branchName: string
+  ): Promise<void> {
+    const { addWorktree } = await import('../../lib/git/worktree')
+
+    let worktreePath: string
+    try {
+      worktreePath = await addWorktree(repository, branchName)
+    } catch (e: any) {
+      this.emitError(
+        new Error(`Failed to create worktree for branch "${branchName}": ${e.message}`)
+      )
+      return
+    }
+
+    const addedRepos = await this._addRepositories([worktreePath])
+    if (addedRepos.length > 0) {
+      this._openTab(addedRepos[0])
+    }
+  }
+
   public async _removeRepository(
     repository: Repository | CloningRepository,
     moveToTrash: boolean

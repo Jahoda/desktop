@@ -790,10 +790,13 @@ app.on('ready', () => {
     return createSession(cwd, event.sender)
   })
 
-  ipcMain.handle('claude-send-prompt', async (_, id, prompt, systemPrompt) => {
-    const { sendPrompt } = require('./claude-manager')
-    sendPrompt(id, prompt, systemPrompt)
-  })
+  ipcMain.handle(
+    'claude-send-prompt',
+    async (_, id, prompt, systemPrompt, imagePaths) => {
+      const { sendPrompt } = require('./claude-manager')
+      sendPrompt(id, prompt, systemPrompt, imagePaths)
+    }
+  )
 
   ipcMain.handle('claude-abort', async (_, id) => {
     const { abortRequest } = require('./claude-manager')
@@ -815,6 +818,20 @@ app.on('ready', () => {
     }
     fs.writeFileSync(filePath, code, 'utf-8')
     return true
+  })
+
+  ipcMain.handle('claude-save-image', async (_, base64Data: string) => {
+    const fs = require('fs')
+    const path = require('path')
+    const os = require('os')
+    const tmpDir = path.join(os.tmpdir(), 'gait-claude-images')
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true })
+    }
+    const fileName = `paste-${Date.now()}.png`
+    const filePath = path.join(tmpDir, fileName)
+    fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'))
+    return filePath
   })
 })
 

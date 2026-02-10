@@ -29,8 +29,12 @@ interface INpmScriptsPanelState {
   readonly expandedScript: string | null
   readonly collapsedSections: Set<string>
   readonly pinnedScripts: Set<string>
-  readonly height: number
-  readonly collapsed: boolean
+}
+
+/** Per-repo panel layout state preserved across repo switches */
+interface IRepoPanelLayout {
+  height: number
+  collapsed: boolean
 }
 
 const MIN_HEIGHT = 80
@@ -85,6 +89,8 @@ export class NpmScriptsPanel extends React.Component<
   INpmScriptsPanelProps,
   INpmScriptsPanelState
 > {
+  private static repoLayout = new Map<string, IRepoPanelLayout>()
+
   public constructor(props: INpmScriptsPanelProps) {
     super(props)
     ensureGlobalListeners()
@@ -95,9 +101,19 @@ export class NpmScriptsPanel extends React.Component<
       pinnedScripts: new Set(
         getStringArray(getPinnedStorageKey(props.repoPath))
       ),
+    }
+  }
+
+  private getLayout(): IRepoPanelLayout {
+    return NpmScriptsPanel.repoLayout.get(this.props.repoPath) || {
       height: DEFAULT_HEIGHT,
       collapsed: false,
     }
+  }
+
+  private setLayout(layout: IRepoPanelLayout) {
+    NpmScriptsPanel.repoLayout.set(this.props.repoPath, layout)
+    this.forceUpdate()
   }
 
   private isDragging = false
@@ -227,17 +243,19 @@ export class NpmScriptsPanel extends React.Component<
   }
 
   private onToggleCollapse = () => {
-    this.setState(prev => ({ collapsed: !prev.collapsed }))
+    const layout = this.getLayout()
+    this.setLayout({ ...layout, collapsed: !layout.collapsed })
   }
 
   private onResizeStart = (e: React.MouseEvent) => {
-    if (this.state.collapsed) {
+    const layout = this.getLayout()
+    if (layout.collapsed) {
       return
     }
     e.preventDefault()
     this.isDragging = true
     this.startY = e.clientY
-    this.startHeight = this.state.height
+    this.startHeight = layout.height
   }
 
   private onResizeMove = (e: MouseEvent) => {
@@ -249,7 +267,8 @@ export class NpmScriptsPanel extends React.Component<
       MAX_HEIGHT,
       Math.max(MIN_HEIGHT, this.startHeight + delta)
     )
-    this.setState({ height: newHeight })
+    const layout = this.getLayout()
+    this.setLayout({ ...layout, height: newHeight })
   }
 
   private onResizeEnd = () => {
@@ -325,7 +344,8 @@ export class NpmScriptsPanel extends React.Component<
     name: string,
     command: string,
     packagePath: string,
-    scriptKey: string
+    scriptKey: string,
+    packageLabel?: string
   ) {
     const isRunning = this.isScriptRunning(name, packagePath)
     const isExpanded = this.state.expandedScript === scriptKey
@@ -340,6 +360,7 @@ export class NpmScriptsPanel extends React.Component<
           isRunning={isRunning}
           isExpanded={isExpanded}
           isPinned={isPinned}
+          packageLabel={packageLabel}
           onRun={() => this.onRunScript(name, packagePath)}
           onStop={() => this.onStopScript(name, packagePath)}
           onToggleExpand={() => this.onToggleExpand(scriptKey)}
@@ -397,15 +418,18 @@ export class NpmScriptsPanel extends React.Component<
     command: string
     packagePath: string
     scriptKey: string
+    packageLabel: string | undefined
   }> {
     const all: Array<{
       name: string
       command: string
       packagePath: string
       scriptKey: string
+      packageLabel: string | undefined
     }> = []
 
     const { rootScripts, workspaces, repoPath } = this.props
+    const hasWorkspaces = workspaces.length > 0
 
     for (const [name, command] of Object.entries(rootScripts)) {
       all.push({
@@ -413,6 +437,7 @@ export class NpmScriptsPanel extends React.Component<
         command,
         packagePath: repoPath,
         scriptKey: this.getScriptKey(name, repoPath),
+        packageLabel: hasWorkspaces ? 'root' : undefined,
       })
     }
 
@@ -423,6 +448,7 @@ export class NpmScriptsPanel extends React.Component<
           command,
           packagePath: ws.path,
           scriptKey: this.getScriptKey(name, ws.path),
+          packageLabel: ws.name,
         })
       }
     }
@@ -455,7 +481,8 @@ export class NpmScriptsPanel extends React.Component<
               s.name,
               s.command,
               s.packagePath,
-              s.scriptKey
+              s.scriptKey,
+              s.packageLabel
             )
           )}
         </div>
@@ -465,7 +492,7 @@ export class NpmScriptsPanel extends React.Component<
 
   public render() {
     const { rootScripts, workspaces, manager } = this.props
-    const { height, collapsed } = this.state
+    const { height, collapsed } = this.getLayout()
     const runningCount = this.getRunningCount()
     const hasWorkspaces = workspaces.length > 0
 
