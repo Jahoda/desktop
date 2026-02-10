@@ -437,6 +437,8 @@ export class App extends React.Component<IAppProps, IAppState> {
         return this.push({ forceWithLease: true })
       case 'pull':
         return this.pull()
+      case 'pull-rebase':
+        return this.pullRebase()
       case 'fetch':
         return this.fetch()
       case 'show-changes':
@@ -967,6 +969,15 @@ export class App extends React.Component<IAppProps, IAppState> {
     }
 
     this.props.dispatcher.pull(state.repository)
+  }
+
+  private async pullRebase() {
+    const state = this.state.selectedState
+    if (state == null || state.type !== SelectionType.Repository) {
+      return
+    }
+
+    this.props.dispatcher.pullRebase(state.repository)
   }
 
   private async fetch() {

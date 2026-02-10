@@ -764,6 +764,11 @@ export class Dispatcher {
     return this.appStore._pull(repository)
   }
 
+  /** Pull with rebase from the current remote. */
+  public pullRebase(repository: Repository): Promise<void> {
+    return this.appStore._pullRebase(repository)
+  }
+
   /** Fetch a specific refspec for the repository. */
   public fetchRefspec(
     repository: Repository,

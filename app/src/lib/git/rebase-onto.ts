@@ -67,30 +67,24 @@ export async function countCommitsOnBranch(
 /**
  * Perform a rebase --onto of the current branch onto the default branch.
  *
- * This effectively rebases all commits unique to the current branch
- * onto the tip of the default branch.
+ * This fetches the latest state from origin, then rebases all commits
+ * unique to the current branch onto origin/{defaultBranch} using
+ * `git rebase --onto` with the merge-base for minimal conflicts.
  */
 export async function rebaseOntoDefaultBranch(
   repository: Repository,
   defaultBranch: Branch
 ): Promise<IRebaseOntoResult> {
-  const targetBranch = defaultBranch.name
-
-  // Count commits on the current branch that are not on the default branch
-  const commitCount = await countCommitsOnBranch(repository, targetBranch)
-
-  if (commitCount === 0) {
-    return {
-      result: RebaseResult.AlreadyUpToDate,
-      commitCount: 0,
-      targetBranch,
-    }
-  }
+  // Resolve the bare branch name (strip origin/ prefix if present)
+  const bareName = defaultBranch.name.startsWith('origin/')
+    ? defaultBranch.name.replace('origin/', '')
+    : defaultBranch.name
+  const remoteRef = `origin/${bareName}`
 
   try {
-    // First, fetch the latest state of the default branch
+    // Fetch the latest state of the default branch from origin
     await git(
-      ['fetch', 'origin', targetBranch],
+      ['fetch', 'origin', bareName],
       repository.path,
       'fetchDefaultBranch',
       {
@@ -102,9 +96,40 @@ export async function rebaseOntoDefaultBranch(
     // Fetch may fail if offline, continue with local state
   }
 
+  // Use merge-base to find the fork point between current branch and the
+  // remote default branch — this is more robust than HEAD~N when the
+  // branch has been partially rebased before.
+  let mergeBase: string | null = null
+  try {
+    const mbResult = await git(
+      ['merge-base', remoteRef, 'HEAD'],
+      repository.path,
+      'mergeBase',
+      { successExitCodes: new Set([0]) }
+    )
+    mergeBase = mbResult.stdout.trim()
+  } catch {
+    // fall through
+  }
+
+  // Count commits that will be rebased
+  const commitCount = await countCommitsOnBranch(repository, remoteRef)
+
+  if (commitCount === 0) {
+    return {
+      result: RebaseResult.AlreadyUpToDate,
+      commitCount: 0,
+      targetBranch: remoteRef,
+    }
+  }
+
+  // Use merge-base as the upstream reference for --onto when available,
+  // falling back to HEAD~N
+  const upstreamRef = mergeBase ?? `HEAD~${commitCount}`
+
   try {
     const result = await git(
-      ['rebase', '--onto', targetBranch, `HEAD~${commitCount}`],
+      ['rebase', '--onto', remoteRef, upstreamRef],
       repository.path,
       'rebaseOnto',
       {
@@ -117,14 +142,14 @@ export async function rebaseOntoDefaultBranch(
       return {
         result: RebaseResult.CompletedWithoutError,
         commitCount,
-        targetBranch,
+        targetBranch: remoteRef,
       }
     }
 
     return {
       result: RebaseResult.Error,
       commitCount,
-      targetBranch,
+      targetBranch: remoteRef,
     }
   } catch (err) {
     // Check if this is a conflict
@@ -137,7 +162,7 @@ export async function rebaseOntoDefaultBranch(
         return {
           result: RebaseResult.ConflictsEncountered,
           commitCount,
-          targetBranch,
+          targetBranch: remoteRef,
         }
       }
     }
@@ -145,7 +170,7 @@ export async function rebaseOntoDefaultBranch(
     return {
       result: RebaseResult.Error,
       commitCount,
-      targetBranch,
+      targetBranch: remoteRef,
     }
   }
 }

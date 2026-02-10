@@ -337,6 +337,12 @@ export function buildDefaultMenu({
         click: emit('pull'),
       },
       {
+        id: 'pull-rebase',
+        label: __DARWIN__ ? 'Pull (Rebase)' : 'Pull (&Rebase)',
+        accelerator: 'CmdOrCtrl+Shift+R',
+        click: emit('pull-rebase'),
+      },
+      {
         id: 'fetch',
         label: __DARWIN__ ? 'Fetch' : '&Fetch',
         accelerator: 'CmdOrCtrl+Shift+T',

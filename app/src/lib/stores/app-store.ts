@@ -153,6 +153,7 @@ import {
   getWorkingDirectoryDiff,
   isCoAuthoredByTrailer,
   pull as pullRepo,
+  pullRebase as pullRebaseRepo,
   push as pushRepo,
   renameBranch,
   saveGitIgnore,
@@ -5151,6 +5152,88 @@ export class AppStore extends TypedBaseStore<IAppState> {
   public async _pull(repository: Repository): Promise<void> {
     return this.withRefreshedGitHubRepository(repository, repository => {
       return this.performPull(repository)
+    })
+  }
+
+  /** Pull with rebase from the current remote. */
+  public async _pullRebase(repository: Repository): Promise<void> {
+    return this.withRefreshedGitHubRepository(repository, repository => {
+      return this.performPullRebase(repository)
+    })
+  }
+
+  /** This shouldn't be called directly. See `Dispatcher`. */
+  private async performPullRebase(repository: Repository): Promise<void> {
+    return this.withPushPullFetch(repository, async () => {
+      const gitStore = this.gitStoreCache.get(repository)
+      const remote = gitStore.currentRemote
+
+      if (!remote) {
+        throw new Error('The repository has no remotes.')
+      }
+
+      const state = this.repositoryStateCache.get(repository)
+      const tip = state.branchesState.tip
+
+      if (tip.kind === TipState.Unborn) {
+        throw new Error('The current branch is unborn.')
+      }
+
+      if (tip.kind === TipState.Detached) {
+        throw new Error('The current repository is in a detached HEAD state.')
+      }
+
+      if (tip.kind === TipState.Valid) {
+        const title = `Pulling ${remote.name} (rebase)`
+        const kind = 'pull'
+        this.updatePushPullFetchProgress(repository, {
+          kind,
+          title,
+          value: 0,
+          remote: remote.name,
+        })
+
+        try {
+          const pullWeight = 0.6
+
+          await gitStore.performFailableOperation(
+            async () => {
+              await pullRebaseRepo(repository, remote, {
+                progressCallback: progress => {
+                  this.updatePushPullFetchProgress(repository, {
+                    ...progress,
+                    value: progress.value * pullWeight,
+                  })
+                },
+              })
+              return true
+            },
+            {
+              retryAction: {
+                type: RetryActionType.Pull,
+                repository,
+              },
+            }
+          )
+
+          const refreshTitle = __DARWIN__
+            ? 'Refreshing Repository'
+            : 'Refreshing repository'
+
+          this.updatePushPullFetchProgress(repository, {
+            kind: 'generic',
+            title: refreshTitle,
+            description: 'Fast-forwarding branches',
+            value: pullWeight,
+          })
+
+          await this.fastForwardBranches(repository)
+          await this.refreshBranchProtectionState(repository)
+          await this._refreshRepository(repository)
+        } finally {
+          this.updatePushPullFetchProgress(repository, null)
+        }
+      }
     })
   }
 
