@@ -108,6 +108,7 @@ export enum PopupType {
   HookFailed = 'HookFailed',
   CommitProgress = 'CommitProgress',
   ImportFromGitHubDesktop = 'ImportFromGitHubDesktop',
+  FileEditor = 'FileEditor',
 }
 
 interface IBasePopup {
@@ -482,5 +483,10 @@ export type PopupDetail =
     }
   | {
       type: PopupType.ImportFromGitHubDesktop
+    }
+  | {
+      type: PopupType.FileEditor
+      repository: Repository
+      file: WorkingDirectoryFileChange
     }
 export type Popup = IBasePopup & PopupDetail

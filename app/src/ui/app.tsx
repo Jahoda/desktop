@@ -83,6 +83,7 @@ import { Publish } from './publish-repository'
 import { Acknowledgements } from './acknowledgements'
 import { UntrustedCertificate } from './untrusted-certificate'
 import { ImportFromGitHubDesktop } from './import/import-from-github-desktop'
+import { FileEditorDialog } from './file-editor/file-editor-dialog'
 import type {
   IGHDAccount,
   IGHDPreferences,
@@ -2702,6 +2703,16 @@ export class App extends React.Component<IAppProps, IAppState> {
             key="import-from-github-desktop"
             onDismissed={onPopupDismissedFn}
             onImport={this.onImportFromGitHubDesktop}
+          />
+        )
+      case PopupType.FileEditor:
+        return (
+          <FileEditorDialog
+            key="file-editor"
+            repository={popup.repository}
+            file={popup.file}
+            dispatcher={this.props.dispatcher}
+            onDismissed={onPopupDismissedFn}
           />
         )
       default:

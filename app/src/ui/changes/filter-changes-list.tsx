@@ -791,6 +791,20 @@ export class FilterChangesList extends React.Component<
       }
     )
 
+    if (paths.length === 1) {
+      items.push({
+        label: __DARWIN__ ? 'Edit File' : 'Edit file',
+        action: () => {
+          this.props.dispatcher.showPopup({
+            type: PopupType.FileEditor,
+            repository: this.props.repository,
+            file,
+          })
+        },
+        enabled,
+      })
+    }
+
     return items
   }
 
@@ -1115,7 +1129,15 @@ export class FilterChangesList extends React.Component<
   }
 
   private onChangedFileDoubleClick = (item: IChangesListItem) => {
-    this.props.onOpenItemInExternalEditor(item.change.path)
+    if (item.change.status.kind === AppFileStatusKind.Deleted) {
+      this.props.onOpenItemInExternalEditor(item.change.path)
+      return
+    }
+    this.props.dispatcher.showPopup({
+      type: PopupType.FileEditor,
+      repository: this.props.repository,
+      file: item.change,
+    })
   }
 
   private onItemKeyDown = (

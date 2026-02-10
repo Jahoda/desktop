@@ -1,0 +1,46 @@
+.file-editor-dialog {
+  min-width: 700px;
+  max-width: 900px;
+
+  .dialog-content {
+    padding: 0;
+  }
+
+  .code-mirror-editor-container {
+    height: 500px;
+
+    .CodeMirror {
+      height: 100%;
+      font-family: var(--font-family-monospace);
+      font-size: var(--font-size-sm);
+      background-color: var(--background-color);
+      color: var(--text-color);
+
+      .CodeMirror-gutters {
+        background-color: var(--box-background-color);
+        border-right: 1px solid var(--box-border-color);
+      }
+
+      .CodeMirror-linenumber {
+        color: var(--text-secondary-color);
+      }
+
+      .CodeMirror-cursor {
+        border-left-color: var(--text-color);
+      }
+
+      .CodeMirror-selected {
+        background-color: var(--box-selected-background-color);
+      }
+
+      .CodeMirror-focused .CodeMirror-selected {
+        background-color: var(--box-selected-active-background-color);
+      }
+    }
+  }
+
+  .file-editor-error {
+    padding: var(--spacing-double);
+    color: var(--error-color);
+  }
+}
