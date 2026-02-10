@@ -206,17 +206,18 @@ export class TerminalPanel extends React.Component<
             {collapsed ? '\u25B2' : '\u25BC'}
           </button>
         </div>
-        {!collapsed && (
-          <div className="terminal-content">
-            {allTerminals.map(({ tab, isCurrentRepo }) => (
-              <TerminalView
-                key={tab.id}
-                terminalId={tab.id}
-                isActive={isCurrentRepo && tab.id === activeTabId}
-              />
-            ))}
-          </div>
-        )}
+        <div
+          className="terminal-content"
+          style={collapsed ? { display: 'none' } : undefined}
+        >
+          {allTerminals.map(({ tab, isCurrentRepo }) => (
+            <TerminalView
+              key={tab.id}
+              terminalId={tab.id}
+              isActive={!collapsed && isCurrentRepo && tab.id === activeTabId}
+            />
+          ))}
+        </div>
       </div>
     )
   }

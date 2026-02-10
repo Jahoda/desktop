@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { clipboard, ipcRenderer } from 'electron'
+import { clipboard, ipcRenderer, shell } from 'electron'
 import '@xterm/xterm/css/xterm.css'
 
 interface ITerminalViewProps {
@@ -11,10 +11,13 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
   private containerRef = React.createRef<HTMLDivElement>()
   private terminal: any = null
   private fitAddon: any = null
+  private webglAddon: any = null
   private resizeObserver: ResizeObserver | null = null
   /** Buffer PTY output that arrives before xterm is ready */
   private pendingOutput: string[] = []
   private xtermReady = false
+  private disposed = false
+  private fitTimeout: ReturnType<typeof setTimeout> | null = null
 
   public componentDidMount() {
     // Register IPC listeners FIRST to not miss any output
@@ -24,18 +27,28 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
   }
 
   public componentWillUnmount() {
+    this.disposed = true
+    if (this.fitTimeout) {
+      clearTimeout(this.fitTimeout)
+    }
     ipcRenderer.removeListener('pty-output', this.onPtyOutput)
     ipcRenderer.removeListener('pty-exit', this.onPtyExit)
     this.resizeObserver?.disconnect()
+    this.resizeObserver = null
+    this.webglAddon?.dispose()
     this.terminal?.dispose()
   }
 
   public componentDidUpdate(prevProps: ITerminalViewProps) {
     if (this.props.isActive) {
-      // Use rAF to ensure the element is visible after display change,
-      // then a short delay to let the layout settle before fitting
       requestAnimationFrame(() => {
+        if (this.disposed) {
+          return
+        }
         setTimeout(() => {
+          if (this.disposed) {
+            return
+          }
           this.fit()
           if (!prevProps.isActive) {
             this.focusTerminal()
@@ -53,7 +66,6 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
     if (this.xtermReady && this.terminal) {
       this.terminal.write(data)
     } else {
-      // Buffer output until xterm is ready
       this.pendingOutput.push(data)
     }
   }
@@ -73,7 +85,6 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
       return
     }
     this.terminal.focus()
-    // Also focus the underlying textarea directly
     const container = this.containerRef.current
     if (container) {
       const textarea = container.querySelector(
@@ -94,6 +105,10 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
     try {
       const { Terminal } = await import('@xterm/xterm')
 
+      if (this.disposed) {
+        return
+      }
+
       this.terminal = new Terminal({
         fontSize: 13,
         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
@@ -101,102 +116,198 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
           background: '#1e1e1e',
           foreground: '#d4d4d4',
           cursor: '#d4d4d4',
+          cursorAccent: '#1e1e1e',
           selectionBackground: '#264f78',
+          black: '#000000',
+          red: '#cd3131',
+          green: '#0dbc79',
+          yellow: '#e5e510',
+          blue: '#2472c8',
+          magenta: '#bc3fbc',
+          cyan: '#11a8cd',
+          white: '#e5e5e5',
+          brightBlack: '#666666',
+          brightRed: '#f14c4c',
+          brightGreen: '#23d18b',
+          brightYellow: '#f5f543',
+          brightBlue: '#3b8eea',
+          brightMagenta: '#d670d6',
+          brightCyan: '#29b8db',
+          brightWhite: '#ffffff',
         },
         cursorBlink: true,
+        cursorStyle: 'bar',
         allowProposedApi: true,
         macOptionIsMeta: true,
+        scrollback: 5000,
+        tabStopWidth: 4,
+        drawBoldTextInBrightColors: true,
+        fastScrollModifier: 'alt',
+        smoothScrollDuration: 100,
       })
 
-      try {
-        const { FitAddon } = await import('@xterm/addon-fit')
-        this.fitAddon = new FitAddon()
-        this.terminal.loadAddon(this.fitAddon)
-      } catch {
-        // FitAddon not available
-      }
+      // Load addons - all with graceful fallbacks
+      await this.loadAddons()
 
       this.terminal.open(container)
 
-      // Flush any buffered output
+      // WebGL must be activated after open()
+      await this.activateWebGL()
+
+      // Flush buffered output
       this.xtermReady = true
       for (const data of this.pendingOutput) {
         this.terminal.write(data)
       }
       this.pendingOutput = []
 
-      // Custom key handling for better usability
-      this.terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-        if (e.type !== 'keydown') {
-          return true
-        }
-
-        const isMeta = e.metaKey
-
-        // Cmd+C: copy selection (if any), otherwise send SIGINT
-        if (isMeta && e.key === 'c') {
-          const sel = this.terminal.getSelection()
-          if (sel) {
-            clipboard.writeText(sel)
-            return false
-          }
-          return true
-        }
-
-        // Cmd+V: paste from clipboard
-        if (isMeta && e.key === 'v') {
-          const text = clipboard.readText()
-          if (text) {
-            ipcRenderer.invoke('pty-write', this.props.terminalId, text)
-          }
-          return false
-        }
-
-        // Cmd+A: select all terminal content
-        if (isMeta && e.key === 'a') {
-          this.terminal.selectAll()
-          return false
-        }
-
-        // Shift+Arrow keys: extend selection
-        if (e.shiftKey && !isMeta && !e.ctrlKey && !e.altKey) {
-          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' ||
-              e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-            this.handleShiftArrowSelection(e.key)
-            return false
-          }
-        }
-
-        // Shift+Option+Arrow: extend selection by word
-        if (e.shiftKey && e.altKey && !isMeta && !e.ctrlKey) {
-          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-            this.handleShiftOptionArrowSelection(e.key)
-            return false
-          }
-        }
-
-        return true
-      })
-
-      // Handle user input - send to PTY
-      this.terminal.onData((data: string) => {
-        this.selectionAnchor = null
-        ipcRenderer.invoke('pty-write', this.props.terminalId, data)
-      })
-
-      // Setup resize observer
-      this.resizeObserver = new ResizeObserver(() => {
-        this.fit()
-      })
-      this.resizeObserver.observe(container)
+      this.setupKeyHandlers()
+      this.setupInputHandler()
+      this.setupResizeObserver(container)
 
       this.fit()
-      setTimeout(() => this.focusTerminal(), 100)
+      setTimeout(() => {
+        if (!this.disposed) {
+          this.focusTerminal()
+        }
+      }, 100)
     } catch (err) {
       console.error('[terminal-view] Failed to init xterm:', err)
       container.textContent =
         'Terminal failed to initialize: ' + String(err)
     }
+  }
+
+  private async loadAddons() {
+    // FitAddon - responsive terminal sizing
+    try {
+      const { FitAddon } = await import('@xterm/addon-fit')
+      this.fitAddon = new FitAddon()
+      this.terminal.loadAddon(this.fitAddon)
+    } catch {
+      // FitAddon not available
+    }
+
+    // WebLinksAddon - clickable URLs
+    try {
+      const { WebLinksAddon } = await import('@xterm/addon-web-links')
+      this.terminal.loadAddon(
+        new WebLinksAddon((_event: MouseEvent, uri: string) => {
+          shell.openExternal(uri)
+        })
+      )
+    } catch {
+      // WebLinksAddon not available
+    }
+
+    // Unicode11Addon - better emoji/unicode support
+    try {
+      const { Unicode11Addon } = await import('@xterm/addon-unicode11')
+      const unicode11 = new Unicode11Addon()
+      this.terminal.loadAddon(unicode11)
+      this.terminal.unicode.activeVersion = '11'
+    } catch {
+      // Unicode11Addon not available
+    }
+  }
+
+  private async activateWebGL() {
+    try {
+      const { WebglAddon } = await import('@xterm/addon-webgl')
+      if (this.disposed) {
+        return
+      }
+      this.webglAddon = new WebglAddon()
+      // Fall back to canvas renderer if WebGL context is lost
+      this.webglAddon.onContextLoss(() => {
+        console.warn('[terminal-view] WebGL context lost, falling back to canvas')
+        this.webglAddon?.dispose()
+        this.webglAddon = null
+      })
+      this.terminal.loadAddon(this.webglAddon)
+    } catch {
+      // WebGL not available, xterm falls back to canvas automatically
+    }
+  }
+
+  private setupKeyHandlers() {
+    this.terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      if (e.type !== 'keydown') {
+        return true
+      }
+
+      const isMeta = e.metaKey
+
+      // Cmd+C: copy selection (if any), otherwise send SIGINT
+      if (isMeta && e.key === 'c') {
+        const sel = this.terminal.getSelection()
+        if (sel) {
+          clipboard.writeText(sel)
+          return false
+        }
+        return true
+      }
+
+      // Cmd+V: paste from clipboard
+      if (isMeta && e.key === 'v') {
+        const text = clipboard.readText()
+        if (text) {
+          ipcRenderer.invoke('pty-write', this.props.terminalId, text)
+        }
+        return false
+      }
+
+      // Cmd+A: select all terminal content
+      if (isMeta && e.key === 'a') {
+        this.terminal.selectAll()
+        return false
+      }
+
+      // Cmd+K: clear terminal
+      if (isMeta && e.key === 'k') {
+        this.terminal.clear()
+        return false
+      }
+
+      // Shift+Arrow keys: extend selection
+      if (e.shiftKey && !isMeta && !e.ctrlKey && !e.altKey) {
+        if (
+          e.key === 'ArrowLeft' ||
+          e.key === 'ArrowRight' ||
+          e.key === 'ArrowUp' ||
+          e.key === 'ArrowDown'
+        ) {
+          this.handleShiftArrowSelection(e.key)
+          return false
+        }
+      }
+
+      // Shift+Option+Arrow: extend selection by word
+      if (e.shiftKey && e.altKey && !isMeta && !e.ctrlKey) {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          this.handleShiftOptionArrowSelection(e.key)
+          return false
+        }
+      }
+
+      return true
+    })
+  }
+
+  private setupInputHandler() {
+    this.terminal.onData((data: string) => {
+      this.selectionAnchor = null
+      ipcRenderer.invoke('pty-write', this.props.terminalId, data)
+    })
+  }
+
+  private setupResizeObserver(container: HTMLElement) {
+    this.resizeObserver = new ResizeObserver(() => {
+      if (!this.disposed) {
+        this.debouncedFit()
+      }
+    })
+    this.resizeObserver.observe(container)
   }
 
   private selectionAnchor: { x: number; y: number } | null = null
@@ -210,7 +321,6 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
     const buf = this.terminal.buffer.active
 
     if (!sel) {
-      // Start new selection from cursor position
       const cx = buf.cursorX
       const cy = buf.cursorY + buf.baseY
       this.selectionAnchor = { x: cx, y: cy }
@@ -235,17 +345,17 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
       this.terminal.select(
         startX,
         startY,
-        startY === endY ? endX - startX : (this.terminal.cols - startX) + endX + (endY - startY - 1) * this.terminal.cols
+        startY === endY
+          ? endX - startX
+          : this.terminal.cols - startX + endX + (endY - startY - 1) * this.terminal.cols
       )
       return
     }
 
-    // Extend existing selection
     if (!this.selectionAnchor) {
       this.selectionAnchor = { x: sel.start.x, y: sel.start.y }
     }
 
-    // Figure out which end to move (the one farther from anchor)
     let endX = sel.end.x
     let endY = sel.end.y
 
@@ -265,7 +375,10 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
     const sY = ay < endY || (ay === endY && ax <= endX) ? ay : endY
     const eX = ay < endY || (ay === endY && ax <= endX) ? endX : ax
     const eY = ay < endY || (ay === endY && ax <= endX) ? endY : ay
-    const len = sY === eY ? eX - sX : (this.terminal.cols - sX) + eX + (eY - sY - 1) * this.terminal.cols
+    const len =
+      sY === eY
+        ? eX - sX
+        : this.terminal.cols - sX + eX + (eY - sY - 1) * this.terminal.cols
     this.terminal.select(sX, sY, Math.max(len, 1))
   }
 
@@ -277,7 +390,6 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
     const buf = this.terminal.buffer.active
     const sel = this.terminal.getSelectionPosition()
 
-    // Determine the current "cursor" for selection
     let cx: number
     let cy: number
     if (sel) {
@@ -292,7 +404,6 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
       this.selectionAnchor = { x: cx, y: cy }
     }
 
-    // Find word boundary
     const line = buf.getLine(cy)
     if (!line) {
       return
@@ -300,7 +411,6 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
 
     let nx = cx
     if (key === 'ArrowLeft') {
-      // Skip spaces, then skip word chars
       while (nx > 0 && (line.getCell(nx - 1)?.getChars() ?? ' ').trim() === '') { nx-- }
       while (nx > 0 && (line.getCell(nx - 1)?.getChars() ?? ' ').trim() !== '') { nx-- }
     } else {
@@ -315,26 +425,41 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
     const sY = ay < cy || (ay === cy && ax <= nx) ? ay : cy
     const eX = ay < cy || (ay === cy && ax <= nx) ? nx : ax
     const eY = ay < cy || (ay === cy && ax <= nx) ? cy : ay
-    const len = sY === eY ? eX - sX : (this.terminal.cols - sX) + eX + (eY - sY - 1) * this.terminal.cols
+    const len =
+      sY === eY
+        ? eX - sX
+        : this.terminal.cols - sX + eX + (eY - sY - 1) * this.terminal.cols
     this.terminal.select(sX, sY, Math.max(len, 1))
   }
 
+  /** Debounced fit to avoid excessive resize calls */
+  private debouncedFit() {
+    if (this.fitTimeout) {
+      clearTimeout(this.fitTimeout)
+    }
+    this.fitTimeout = setTimeout(() => {
+      this.fitTimeout = null
+      this.fit()
+    }, 50)
+  }
+
   private fit() {
-    if (this.fitAddon) {
-      try {
-        this.fitAddon.fit()
-        const dims = this.fitAddon.proposeDimensions()
-        if (dims) {
-          ipcRenderer.invoke(
-            'pty-resize',
-            this.props.terminalId,
-            dims.cols,
-            dims.rows
-          )
-        }
-      } catch {
-        // ignore fit errors
+    if (this.disposed || !this.fitAddon || !this.terminal) {
+      return
+    }
+    try {
+      this.fitAddon.fit()
+      const dims = this.fitAddon.proposeDimensions()
+      if (dims) {
+        ipcRenderer.invoke(
+          'pty-resize',
+          this.props.terminalId,
+          dims.cols,
+          dims.rows
+        )
       }
+    } catch {
+      // ignore fit errors
     }
   }
 
@@ -343,7 +468,6 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
   }
 
   private onKeyDown = (e: React.KeyboardEvent) => {
-    // Allow Cmd/Ctrl+` to toggle terminal
     const modifier = e.metaKey || e.ctrlKey
     if (modifier && e.key === '`') {
       return
