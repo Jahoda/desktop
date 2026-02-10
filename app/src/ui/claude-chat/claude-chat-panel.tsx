@@ -28,6 +28,10 @@ const MAX_WIDTH = 800
 /**
  * Claude Chat panel that appears on the right side of the app.
  * Preserves chat state per-repo in a static Map.
+ *
+ * IPC listeners are registered once globally (never removed) so that
+ * stream/complete/error events are always processed even when the
+ * component is unmounted (e.g. panel toggled off, repo switch).
  */
 export class ClaudeChatPanel extends React.Component<
   IClaudeChatPanelProps,
@@ -40,6 +44,12 @@ export class ClaudeChatPanel extends React.Component<
 
   /** Buffer stderr output per repo so we can show it on failure */
   private static stderrBuffer = new Map<number, string>()
+
+  /** The currently mounted instance (at most one at a time). */
+  private static mountedInstance: ClaudeChatPanel | null = null
+
+  /** Whether global IPC listeners have been registered. */
+  private static listenersRegistered = false
 
   private isDragging = false
   private startX = 0
@@ -54,82 +64,48 @@ export class ClaudeChatPanel extends React.Component<
     }
   }
 
-  public componentDidMount() {
-    ipcRenderer.on('claude-stream-event', this.onStreamEvent)
-    ipcRenderer.on('claude-complete', this.onComplete)
-    ipcRenderer.on('claude-error', this.onError)
-    ipcRenderer.on('claude-stderr', this.onStderr)
-
-    this.ensureSession()
-
-    document.addEventListener('mousemove', this.onMouseMove)
-    document.addEventListener('mouseup', this.onMouseUp)
-  }
-
-  public componentWillUnmount() {
-    ipcRenderer.removeListener('claude-stream-event', this.onStreamEvent)
-    ipcRenderer.removeListener('claude-complete', this.onComplete)
-    ipcRenderer.removeListener('claude-error', this.onError)
-    ipcRenderer.removeListener('claude-stderr', this.onStderr)
-
-    document.removeEventListener('mousemove', this.onMouseMove)
-    document.removeEventListener('mouseup', this.onMouseUp)
-  }
-
-  public componentDidUpdate(prevProps: IClaudeChatPanelProps) {
-    if (prevProps.repoId !== this.props.repoId) {
-      this.ensureSession()
-      this.forceUpdate()
-    }
-  }
-
-  private onStreamEvent = (_: any, sessionId: string, event: any) => {
-    this.handleStreamEvent(sessionId, event)
-  }
-
-  private onComplete = (_: any, sessionId: string, _code: number | null) => {
-    this.handleComplete(sessionId)
-  }
-
-  private onError = (_: any, sessionId: string, error: any) => {
-    this.handleError(sessionId, error)
-  }
-
-  private onStderr = (_: any, sessionId: string, text: string) => {
-    const repoId = this.findRepoIdForSession(sessionId)
-    if (repoId === null) {
+  /**
+   * Register IPC listeners once globally. They are never removed so that
+   * events arriving while the component is unmounted still update the
+   * static per-repo state maps.
+   */
+  private static ensureGlobalListeners() {
+    if (ClaudeChatPanel.listenersRegistered) {
       return
     }
-    const existing = ClaudeChatPanel.stderrBuffer.get(repoId) || ''
-    ClaudeChatPanel.stderrBuffer.set(repoId, existing + text)
-  }
+    ClaudeChatPanel.listenersRegistered = true
 
-  private getRepoChatState(): IRepoChatState {
-    return ClaudeChatPanel.repoChatState.get(this.props.repoId) || {
-      messages: [],
-      sessionId: null,
-      isStreaming: false,
-    }
-  }
+    ipcRenderer.on(
+      'claude-stream-event',
+      (_: any, sessionId: string, event: any) => {
+        ClaudeChatPanel.handleStreamEvent(sessionId, event)
+      }
+    )
 
-  private setRepoChatState(state: IRepoChatState) {
-    ClaudeChatPanel.repoChatState.set(this.props.repoId, state)
-    this.forceUpdate()
-  }
+    ipcRenderer.on(
+      'claude-complete',
+      (_: any, sessionId: string, _code: number | null) => {
+        ClaudeChatPanel.handleComplete(sessionId)
+      }
+    )
 
-  private async ensureSession() {
-    const chatState = this.getRepoChatState()
-    if (!chatState.sessionId) {
-      const sessionId: string = await ipcRenderer.invoke(
-        'claude-create-session',
-        this.props.cwd
-      )
-      this.setRepoChatState({ ...chatState, sessionId })
-    }
+    ipcRenderer.on(
+      'claude-error',
+      (_: any, sessionId: string, error: any) => {
+        ClaudeChatPanel.handleError(sessionId, error)
+      }
+    )
+
+    ipcRenderer.on(
+      'claude-stderr',
+      (_: any, sessionId: string, text: string) => {
+        ClaudeChatPanel.handleStderr(sessionId, text)
+      }
+    )
   }
 
   /** Find the repoId that owns a given sessionId */
-  private findRepoIdForSession(sessionId: string): number | null {
+  private static findRepoIdForSession(sessionId: string): number | null {
     for (const [repoId, state] of ClaudeChatPanel.repoChatState) {
       if (state.sessionId === sessionId) {
         return repoId
@@ -138,8 +114,20 @@ export class ClaudeChatPanel extends React.Component<
     return null
   }
 
-  private handleStreamEvent(sessionId: string, event: any) {
-    const repoId = this.findRepoIdForSession(sessionId)
+  /** Trigger a re-render on the mounted instance if it displays the given repo. */
+  private static triggerUpdate(repoId: number, scrollToBottom = false) {
+    const inst = ClaudeChatPanel.mountedInstance
+    if (inst && repoId === inst.props.repoId) {
+      if (scrollToBottom) {
+        inst.forceUpdate(() => inst.scrollToBottom())
+      } else {
+        inst.forceUpdate()
+      }
+    }
+  }
+
+  private static handleStreamEvent(sessionId: string, event: any) {
+    const repoId = ClaudeChatPanel.findRepoIdForSession(sessionId)
     if (repoId === null) {
       return
     }
@@ -147,19 +135,20 @@ export class ClaudeChatPanel extends React.Component<
     // Handle different event types from Claude stream-json
     if (event.type === 'assistant' && event.message) {
       // Initial assistant message - set up accumulator
-      const textContent = event.message.content
-        ?.filter((c: any) => c.type === 'text')
-        .map((c: any) => c.text)
-        .join('') || ''
+      const textContent =
+        event.message.content
+          ?.filter((c: any) => c.type === 'text')
+          .map((c: any) => c.text)
+          .join('') || ''
       ClaudeChatPanel.streamingText.set(repoId, textContent)
-      this.updateAssistantMessage(repoId, textContent)
+      ClaudeChatPanel.updateAssistantMessage(repoId, textContent)
     } else if (event.type === 'content_block_delta') {
       // Streaming text delta
       if (event.delta?.type === 'text_delta' && event.delta?.text) {
         const current = ClaudeChatPanel.streamingText.get(repoId) || ''
         const updated = current + event.delta.text
         ClaudeChatPanel.streamingText.set(repoId, updated)
-        this.updateAssistantMessage(repoId, updated)
+        ClaudeChatPanel.updateAssistantMessage(repoId, updated)
       }
     } else if (event.type === 'result') {
       // Final result - use the complete text
@@ -169,12 +158,12 @@ export class ClaudeChatPanel extends React.Component<
         .join('')
       if (resultText) {
         ClaudeChatPanel.streamingText.set(repoId, resultText)
-        this.updateAssistantMessage(repoId, resultText)
+        ClaudeChatPanel.updateAssistantMessage(repoId, resultText)
       }
     }
   }
 
-  private updateAssistantMessage(repoId: number, text: string) {
+  private static updateAssistantMessage(repoId: number, text: string) {
     const state = ClaudeChatPanel.repoChatState.get(repoId)
     if (!state) {
       return
@@ -192,14 +181,11 @@ export class ClaudeChatPanel extends React.Component<
     }
 
     ClaudeChatPanel.repoChatState.set(repoId, { ...state, messages })
-
-    if (repoId === this.props.repoId) {
-      this.forceUpdate(() => this.scrollToBottom())
-    }
+    ClaudeChatPanel.triggerUpdate(repoId, true)
   }
 
-  private handleComplete(sessionId: string) {
-    const repoId = this.findRepoIdForSession(sessionId)
+  private static handleComplete(sessionId: string) {
+    const repoId = ClaudeChatPanel.findRepoIdForSession(sessionId)
     if (repoId === null) {
       return
     }
@@ -233,14 +219,11 @@ export class ClaudeChatPanel extends React.Component<
     }
 
     ClaudeChatPanel.stderrBuffer.delete(repoId)
-
-    if (repoId === this.props.repoId) {
-      this.forceUpdate()
-    }
+    ClaudeChatPanel.triggerUpdate(repoId)
   }
 
-  private handleError(sessionId: string, error: any) {
-    const repoId = this.findRepoIdForSession(sessionId)
+  private static handleError(sessionId: string, error: any) {
+    const repoId = ClaudeChatPanel.findRepoIdForSession(sessionId)
     if (repoId === null) {
       return
     }
@@ -263,9 +246,65 @@ export class ClaudeChatPanel extends React.Component<
 
     ClaudeChatPanel.streamingText.delete(repoId)
     ClaudeChatPanel.stderrBuffer.delete(repoId)
+    ClaudeChatPanel.triggerUpdate(repoId, true)
+  }
 
-    if (repoId === this.props.repoId) {
-      this.forceUpdate(() => this.scrollToBottom())
+  private static handleStderr(sessionId: string, text: string) {
+    const repoId = ClaudeChatPanel.findRepoIdForSession(sessionId)
+    if (repoId === null) {
+      return
+    }
+    const existing = ClaudeChatPanel.stderrBuffer.get(repoId) || ''
+    ClaudeChatPanel.stderrBuffer.set(repoId, existing + text)
+  }
+
+  public componentDidMount() {
+    ClaudeChatPanel.ensureGlobalListeners()
+    ClaudeChatPanel.mountedInstance = this
+
+    this.ensureSession()
+
+    document.addEventListener('mousemove', this.onMouseMove)
+    document.addEventListener('mouseup', this.onMouseUp)
+  }
+
+  public componentWillUnmount() {
+    if (ClaudeChatPanel.mountedInstance === this) {
+      ClaudeChatPanel.mountedInstance = null
+    }
+    // IPC listeners are global — intentionally NOT removed here.
+    document.removeEventListener('mousemove', this.onMouseMove)
+    document.removeEventListener('mouseup', this.onMouseUp)
+  }
+
+  public componentDidUpdate(prevProps: IClaudeChatPanelProps) {
+    if (prevProps.repoId !== this.props.repoId) {
+      this.ensureSession()
+      this.forceUpdate()
+    }
+  }
+
+  private getRepoChatState(): IRepoChatState {
+    return ClaudeChatPanel.repoChatState.get(this.props.repoId) || {
+      messages: [],
+      sessionId: null,
+      isStreaming: false,
+    }
+  }
+
+  private setRepoChatState(state: IRepoChatState) {
+    ClaudeChatPanel.repoChatState.set(this.props.repoId, state)
+    this.forceUpdate()
+  }
+
+  private async ensureSession() {
+    const chatState = this.getRepoChatState()
+    if (!chatState.sessionId) {
+      const sessionId: string = await ipcRenderer.invoke(
+        'claude-create-session',
+        this.props.cwd
+      )
+      this.setRepoChatState({ ...chatState, sessionId })
     }
   }
 
@@ -302,7 +341,7 @@ export class ClaudeChatPanel extends React.Component<
         imagePaths
       )
     } catch (err: any) {
-      this.handleError(chatState.sessionId!, {
+      ClaudeChatPanel.handleError(chatState.sessionId!, {
         message: err?.message || 'Failed to send prompt',
       })
     }
