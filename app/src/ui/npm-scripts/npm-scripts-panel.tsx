@@ -30,6 +30,7 @@ interface INpmScriptsPanelState {
   readonly collapsedSections: Set<string>
   readonly pinnedScripts: Set<string>
   readonly height: number
+  readonly collapsed: boolean
 }
 
 const MIN_HEIGHT = 80
@@ -95,6 +96,7 @@ export class NpmScriptsPanel extends React.Component<
         getStringArray(getPinnedStorageKey(props.repoPath))
       ),
       height: DEFAULT_HEIGHT,
+      collapsed: false,
     }
   }
 
@@ -224,7 +226,14 @@ export class NpmScriptsPanel extends React.Component<
     this.setState({ collapsedSections: updated })
   }
 
+  private onToggleCollapse = () => {
+    this.setState(prev => ({ collapsed: !prev.collapsed }))
+  }
+
   private onResizeStart = (e: React.MouseEvent) => {
+    if (this.state.collapsed) {
+      return
+    }
     e.preventDefault()
     this.isDragging = true
     this.startY = e.clientY
@@ -456,38 +465,55 @@ export class NpmScriptsPanel extends React.Component<
 
   public render() {
     const { rootScripts, workspaces, manager } = this.props
-    const { height } = this.state
+    const { height, collapsed } = this.state
     const runningCount = this.getRunningCount()
     const hasWorkspaces = workspaces.length > 0
 
+    const panelClass = collapsed
+      ? 'npm-scripts-panel collapsed'
+      : 'npm-scripts-panel'
+
     return (
-      <div className="npm-scripts-panel" style={{ height }}>
-        <div
-          className="npm-scripts-resize-handle"
-          onMouseDown={this.onResizeStart}
-        />
+      <div className={panelClass} style={collapsed ? undefined : { height }}>
+        {!collapsed && (
+          <div
+            className="npm-scripts-resize-handle"
+            onMouseDown={this.onResizeStart}
+          />
+        )}
         <div className="npm-scripts-header">
           <span className="npm-scripts-title">
             Scripts ({manager})
           </span>
-          {runningCount > 0 && (
-            <span className="npm-scripts-badge">{runningCount}</span>
-          )}
+          <div className="npm-scripts-header-actions">
+            {runningCount > 0 && (
+              <span className="npm-scripts-badge">{runningCount}</span>
+            )}
+            <button
+              className="npm-scripts-collapse-btn"
+              onClick={this.onToggleCollapse}
+              title={collapsed ? 'Expand scripts' : 'Collapse scripts'}
+            >
+              {collapsed ? '\u25B2' : '\u25BC'}
+            </button>
+          </div>
         </div>
-        <div className="npm-scripts-list">
-          {this.renderPinnedSection()}
-          {Object.keys(rootScripts).length > 0 &&
-            (hasWorkspaces
-              ? this.renderSection(
-                  'Root',
-                  rootScripts,
-                  this.props.repoPath
-                )
-              : this.renderScriptList(rootScripts, this.props.repoPath))}
-          {workspaces.map(ws =>
-            this.renderSection(ws.name, ws.scripts, ws.path)
-          )}
-        </div>
+        {!collapsed && (
+          <div className="npm-scripts-list">
+            {this.renderPinnedSection()}
+            {Object.keys(rootScripts).length > 0 &&
+              (hasWorkspaces
+                ? this.renderSection(
+                    'Root',
+                    rootScripts,
+                    this.props.repoPath
+                  )
+                : this.renderScriptList(rootScripts, this.props.repoPath))}
+            {workspaces.map(ws =>
+              this.renderSection(ws.name, ws.scripts, ws.path)
+            )}
+          </div>
+        )}
       </div>
     )
   }

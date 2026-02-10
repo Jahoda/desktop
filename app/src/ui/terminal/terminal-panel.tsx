@@ -16,6 +16,7 @@ interface IRepoTerminals {
 
 interface ITerminalPanelState {
   readonly height: number
+  readonly collapsed: boolean
 }
 
 const MIN_HEIGHT = 100
@@ -44,6 +45,7 @@ export class TerminalPanel extends React.Component<
     super(props)
     this.state = {
       height: DEFAULT_HEIGHT,
+      collapsed: false,
     }
   }
 
@@ -124,7 +126,14 @@ export class TerminalPanel extends React.Component<
     }
   }
 
+  private onToggleCollapse = () => {
+    this.setState(prev => ({ collapsed: !prev.collapsed }))
+  }
+
   private onResizeStart = (e: React.MouseEvent) => {
+    if (this.state.collapsed) {
+      return
+    }
     e.preventDefault()
     this.isDragging = true
     this.startY = e.clientY
@@ -149,7 +158,7 @@ export class TerminalPanel extends React.Component<
   }
 
   public render() {
-    const { height } = this.state
+    const { height, collapsed } = this.state
     const repoState = this.getRepoState()
     const { tabs, activeTabId } = repoState
 
@@ -171,12 +180,16 @@ export class TerminalPanel extends React.Component<
       }
     })
 
+    const panelClass = collapsed ? 'terminal-panel collapsed' : 'terminal-panel'
+
     return (
-      <div className="terminal-panel" style={{ height }}>
-        <div
-          className="terminal-resize-handle"
-          onMouseDown={this.onResizeStart}
-        />
+      <div className={panelClass} style={collapsed ? undefined : { height }}>
+        {!collapsed && (
+          <div
+            className="terminal-resize-handle"
+            onMouseDown={this.onResizeStart}
+          />
+        )}
         <div className="terminal-panel-header">
           <TerminalTabs
             tabs={tabs}
@@ -185,16 +198,25 @@ export class TerminalPanel extends React.Component<
             onTabClosed={this.onTabClosed}
             onNewTab={this.createNewTerminal}
           />
+          <button
+            className="terminal-collapse-btn"
+            onClick={this.onToggleCollapse}
+            title={collapsed ? 'Expand terminal' : 'Collapse terminal'}
+          >
+            {collapsed ? '\u25B2' : '\u25BC'}
+          </button>
         </div>
-        <div className="terminal-content">
-          {allTerminals.map(({ tab, isCurrentRepo }) => (
-            <TerminalView
-              key={tab.id}
-              terminalId={tab.id}
-              isActive={isCurrentRepo && tab.id === activeTabId}
-            />
-          ))}
-        </div>
+        {!collapsed && (
+          <div className="terminal-content">
+            {allTerminals.map(({ tab, isCurrentRepo }) => (
+              <TerminalView
+                key={tab.id}
+                terminalId={tab.id}
+                isActive={isCurrentRepo && tab.id === activeTabId}
+              />
+            ))}
+          </div>
+        )}
       </div>
     )
   }

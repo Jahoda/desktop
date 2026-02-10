@@ -5,6 +5,10 @@
   overflow: hidden;
   position: relative;
   flex-shrink: 0;
+
+  &.collapsed {
+    height: auto !important;
+  }
 }
 
 .npm-scripts-resize-handle {
@@ -31,6 +35,32 @@
   border-bottom: 1px solid var(--box-border-color);
   font-size: var(--font-size-sm);
   font-weight: 600;
+
+  .collapsed & {
+    border-bottom: none;
+  }
+}
+
+.npm-scripts-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.npm-scripts-collapse-btn {
+  border: none;
+  background: none;
+  color: var(--text-secondary-color);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 9px;
+  line-height: 1;
+  flex-shrink: 0;
+
+  &:hover {
+    color: var(--text-color);
+    background-color: var(--list-item-hover-background-color);
+  }
 }
 
 .npm-scripts-title {

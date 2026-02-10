@@ -6,6 +6,10 @@
   flex-shrink: 0;
   min-width: 0;
   overflow: hidden;
+
+  &.collapsed {
+    height: auto !important;
+  }
 }
 
 .terminal-resize-handle {
@@ -104,6 +108,22 @@
   &:hover {
     background-color: var(--list-item-hover-background-color);
     color: var(--text-color);
+  }
+}
+
+.terminal-collapse-btn {
+  border: none;
+  background: none;
+  color: var(--text-secondary-color);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 9px;
+  line-height: 1;
+  flex-shrink: 0;
+
+  &:hover {
+    color: var(--text-color);
+    background-color: var(--list-item-hover-background-color);
   }
 }
 

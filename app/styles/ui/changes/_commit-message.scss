@@ -206,6 +206,33 @@
     }
   }
 
+  .description-toggle {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 2px 0;
+    margin-bottom: 2px;
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary-color);
+    user-select: none;
+
+    &:hover {
+      color: var(--text-color);
+    }
+  }
+
+  .description-toggle-arrow {
+    font-size: 9px;
+    margin-right: 4px;
+    width: 10px;
+    text-align: center;
+  }
+
+  .description-toggle-label {
+    font-weight: 600;
+    font-size: 11px;
+  }
+
   .description-focus-container {
     border: var(--contrast-border);
     border-radius: var(--border-radius);
