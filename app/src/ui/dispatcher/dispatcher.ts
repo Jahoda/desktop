@@ -1136,6 +1136,21 @@ export class Dispatcher {
     return this.appStore._removeAccount(account)
   }
 
+  /** Import data from GitHub Desktop (accounts, repositories, preferences). */
+  public importFromGitHubDesktop(
+    accounts: ReadonlyArray<
+      import('../../lib/import/github-desktop-importer').IGHDAccount
+    >,
+    repositories: ReadonlyArray<string>,
+    preferences: import('../../lib/import/github-desktop-importer').IGHDPreferences | null
+  ): Promise<void> {
+    return this.appStore._importFromGitHubDesktop(
+      accounts,
+      repositories,
+      preferences
+    )
+  }
+
   /**
    * Ask the dispatcher to apply a transformation function to the current
    * state of the application menu.

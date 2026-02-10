@@ -82,6 +82,11 @@ import { About } from './about'
 import { Publish } from './publish-repository'
 import { Acknowledgements } from './acknowledgements'
 import { UntrustedCertificate } from './untrusted-certificate'
+import { ImportFromGitHubDesktop } from './import/import-from-github-desktop'
+import type {
+  IGHDAccount,
+  IGHDPreferences,
+} from '../lib/import/github-desktop-importer'
 import { NoRepositoriesView } from './no-repositories'
 import { ConfirmRemoveRepository } from './remove-repository'
 import { TermsAndConditions } from './terms-and-conditions'
@@ -530,6 +535,10 @@ export class App extends React.Component<IAppProps, IAppState> {
         return this.props.dispatcher.toggleNpmScriptsPanel()
       case 'toggle-terminal-panel':
         return this.props.dispatcher.toggleTerminalPanel()
+      case 'import-from-github-desktop':
+        return this.props.dispatcher.showPopup({
+          type: PopupType.ImportFromGitHubDesktop,
+        })
       default:
         if (isTestMenuEvent(name)) {
           return showTestUI(
@@ -1282,6 +1291,18 @@ export class App extends React.Component<IAppProps, IAppState> {
     deleteRepoFromDisk: boolean
   ) => {
     await this.props.dispatcher.removeRepository(repository, deleteRepoFromDisk)
+  }
+
+  private onImportFromGitHubDesktop = async (
+    accounts: ReadonlyArray<IGHDAccount>,
+    repositories: ReadonlyArray<string>,
+    preferences: IGHDPreferences | null
+  ) => {
+    await this.props.dispatcher.importFromGitHubDesktop(
+      accounts,
+      repositories,
+      preferences
+    )
   }
 
   private getRepository(): Repository | CloningRepository | null {
@@ -2664,6 +2685,14 @@ export class App extends React.Component<IAppProps, IAppState> {
           />
         )
       }
+      case PopupType.ImportFromGitHubDesktop:
+        return (
+          <ImportFromGitHubDesktop
+            key="import-from-github-desktop"
+            onDismissed={onPopupDismissedFn}
+            onImport={this.onImportFromGitHubDesktop}
+          />
+        )
       default:
         return assertNever(popup, `Unknown popup type: ${popup}`)
     }

@@ -49,6 +49,7 @@ export type MenuEvent =
   | 'toggle-changes-filter'
   | 'toggle-npm-scripts-panel'
   | 'toggle-terminal-panel'
+  | 'import-from-github-desktop'
   | TestMenuEvent
 
 /**

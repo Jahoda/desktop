@@ -1,0 +1,69 @@
+.import-section {
+  margin-bottom: 16px;
+
+  h3 {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    margin: 0 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+.import-select-all-btn {
+  border: none;
+  background: none;
+  color: var(--link-button-color);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.import-repo-list {
+  max-height: 250px;
+  overflow-y: auto;
+  border: 1px solid var(--box-border-color);
+  border-radius: var(--border-radius);
+  padding: 4px 0;
+}
+
+.import-repo-item {
+  padding: 2px 8px;
+
+  .import-repo-path {
+    display: block;
+    font-size: 10px;
+    color: var(--text-secondary-color);
+    margin-left: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+.import-pref-details {
+  margin-top: 8px;
+  margin-left: 20px;
+}
+
+.import-pref-item {
+  font-size: var(--font-size-sm);
+  margin-bottom: 4px;
+}
+
+.import-pref-label {
+  color: var(--text-secondary-color);
+}
+
+.import-pref-value {
+  font-weight: 500;
+}
+
+.import-error {
+  color: var(--diff-delete-text-color, #cb2431);
+}

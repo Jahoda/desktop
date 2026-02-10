@@ -40,14 +40,55 @@ function getPinnedStorageKey(repoPath: string): string {
   return `npm-pinned-scripts-${repoPath}`
 }
 
+/**
+ * Static store for running scripts that survives component remounts
+ * (e.g. when switching repos and back).
+ */
+const globalRunningScripts = new Map<string, IRunningScriptState>()
+
+/**
+ * Global IPC listeners that capture output even when no NpmScriptsPanel
+ * instance is mounted (e.g. during repo switches).
+ */
+let globalListenersRegistered = false
+
+function ensureGlobalListeners() {
+  if (globalListenersRegistered) {
+    return
+  }
+  globalListenersRegistered = true
+
+  ipcRenderer.on('npm-script-output', (_: any, id: string, data: string) => {
+    const script = globalRunningScripts.get(id)
+    if (script) {
+      globalRunningScripts.set(id, {
+        ...script,
+        output: script.output + data,
+      })
+    }
+  })
+
+  ipcRenderer.on('npm-script-exit', (_: any, id: string, code: number | null) => {
+    const script = globalRunningScripts.get(id)
+    if (script) {
+      globalRunningScripts.set(id, {
+        ...script,
+        isRunning: false,
+        exitCode: code,
+      })
+    }
+  })
+}
+
 export class NpmScriptsPanel extends React.Component<
   INpmScriptsPanelProps,
   INpmScriptsPanelState
 > {
   public constructor(props: INpmScriptsPanelProps) {
     super(props)
+    ensureGlobalListeners()
     this.state = {
-      runningScripts: new Map(),
+      runningScripts: new Map(globalRunningScripts),
       expandedScript: null,
       collapsedSections: new Set(),
       pinnedScripts: new Set(
@@ -66,6 +107,10 @@ export class NpmScriptsPanel extends React.Component<
     ipcRenderer.on('npm-script-exit', this.onScriptExit)
     document.addEventListener('mousemove', this.onResizeMove)
     document.addEventListener('mouseup', this.onResizeEnd)
+
+    // Sync from global store periodically to pick up output
+    // that arrived while this component was unmounted
+    this.syncFromGlobal()
   }
 
   public componentDidUpdate(prevProps: INpmScriptsPanelProps) {
@@ -85,30 +130,25 @@ export class NpmScriptsPanel extends React.Component<
     document.removeEventListener('mouseup', this.onResizeEnd)
   }
 
-  private onScriptOutput = (_: any, id: string, data: string) => {
-    const { runningScripts } = this.state
-    const script = runningScripts.get(id)
-    if (script) {
-      const updated = new Map(runningScripts)
-      updated.set(id, {
-        ...script,
-        output: script.output + data,
-      })
-      this.setState({ runningScripts: updated })
+  /** Sync component state from global store (picks up output from while unmounted) */
+  private syncFromGlobal() {
+    if (globalRunningScripts.size > 0) {
+      this.setState({ runningScripts: new Map(globalRunningScripts) })
     }
   }
 
-  private onScriptExit = (_: any, id: string, code: number | null) => {
-    const { runningScripts } = this.state
-    const script = runningScripts.get(id)
-    if (script) {
-      const updated = new Map(runningScripts)
-      updated.set(id, {
-        ...script,
-        isRunning: false,
-        exitCode: code,
-      })
-      this.setState({ runningScripts: updated })
+  private onScriptOutput = (_: any, id: string, _data: string) => {
+    // Global listener already updated globalRunningScripts.
+    // Sync to component state for re-render.
+    if (globalRunningScripts.has(id)) {
+      this.setState({ runningScripts: new Map(globalRunningScripts) })
+    }
+  }
+
+  private onScriptExit = (_: any, id: string, _code: number | null) => {
+    // Global listener already updated globalRunningScripts.
+    if (globalRunningScripts.has(id)) {
+      this.setState({ runningScripts: new Map(globalRunningScripts) })
     }
   }
 
@@ -126,17 +166,22 @@ export class NpmScriptsPanel extends React.Component<
       scriptName
     )
 
-    const { runningScripts } = this.state
-    const updated = new Map(runningScripts)
-    const scriptKey = this.getScriptKey(scriptName, packagePath)
-    updated.set(id, {
+    const scriptEntry: IRunningScriptState = {
       id,
       scriptName,
       packagePath: cwd,
       output: '',
       exitCode: null,
       isRunning: true,
-    })
+    }
+
+    // Store in global map so it survives remounts
+    globalRunningScripts.set(id, scriptEntry)
+
+    const { runningScripts } = this.state
+    const updated = new Map(runningScripts)
+    const scriptKey = this.getScriptKey(scriptName, packagePath)
+    updated.set(id, scriptEntry)
     this.setState({
       runningScripts: updated,
       expandedScript: scriptKey,

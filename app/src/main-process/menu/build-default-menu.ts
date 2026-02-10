@@ -121,6 +121,12 @@ export function buildDefaultMenu({
         accelerator: 'CmdOrCtrl+Shift+O',
         click: emit('clone-repository'),
       },
+      separator,
+      {
+        label: 'Import from GitHub Desktop…',
+        id: 'import-from-github-desktop',
+        click: emit('import-from-github-desktop'),
+      },
     ],
   }
 

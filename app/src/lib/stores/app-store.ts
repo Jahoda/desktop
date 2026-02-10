@@ -6705,6 +6705,67 @@ export class AppStore extends TypedBaseStore<IAppState> {
     }
   }
 
+  /** Import accounts, repositories, and preferences from GitHub Desktop. */
+  public async _importFromGitHubDesktop(
+    accounts: ReadonlyArray<
+      import('../import/github-desktop-importer').IGHDAccount
+    >,
+    repositories: ReadonlyArray<string>,
+    preferences: import('../import/github-desktop-importer').IGHDPreferences | null
+  ): Promise<void> {
+    // Import accounts with tokens
+    for (const a of accounts) {
+      if (!a.token) {
+        continue
+      }
+
+      const account = new Account(
+        a.login,
+        a.endpoint,
+        a.token,
+        a.emails.map(e => ({
+          email: e,
+          verified: true,
+          primary: false,
+          visibility: null,
+        })),
+        a.avatarURL,
+        a.id,
+        a.name
+      )
+
+      await this._addAccount(account)
+    }
+
+    // Import repositories
+    if (repositories.length > 0) {
+      await this._addRepositories(repositories)
+    }
+
+    // Import preferences
+    if (preferences) {
+      if (preferences.externalEditor) {
+        localStorage.setItem('externalEditor', preferences.externalEditor)
+      }
+      if (preferences.shell) {
+        localStorage.setItem('shell', preferences.shell)
+      }
+      if (preferences.theme) {
+        localStorage.setItem('theme', preferences.theme)
+      }
+      if (preferences.hideWhitespaceInDiff) {
+        localStorage.setItem(
+          'hide-whitespace-in-diff',
+          preferences.hideWhitespaceInDiff
+        )
+      }
+    }
+
+    log.info(
+      `[AppStore] Imported from GitHub Desktop: ${accounts.length} accounts, ${repositories.length} repositories`
+    )
+  }
+
   public _updateRepositoryMissing(
     repository: Repository,
     missing: boolean
