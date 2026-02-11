@@ -55,6 +55,8 @@ import {
   BranchDropdown,
   RevertProgress,
 } from './toolbar'
+import { ToolbarButton, ToolbarButtonStyle } from './toolbar/button'
+import * as octicons from './octicons/octicons.generated'
 import {
   showCertificateTrustDialog,
   sendReady,
@@ -197,6 +199,7 @@ import {
   BypassReasonType,
 } from './secret-scanning/bypass-push-protection-dialog'
 import { HookFailed } from './hook-failed/hook-failed'
+import { ConfirmResetToOrigin } from './reset-to-origin/confirm-reset-to-origin'
 import { CommitProgress } from './commit-progress/commit-progress'
 import { TabBar } from './tabs/tab-bar'
 import { NpmScriptsPanel } from './npm-scripts/npm-scripts-panel'
@@ -2725,6 +2728,16 @@ export class App extends React.Component<IAppProps, IAppState> {
             onDismissed={onPopupDismissedFn}
           />
         )
+      case PopupType.ConfirmResetToOrigin:
+        return (
+          <ConfirmResetToOrigin
+            key="confirm-reset-to-origin"
+            dispatcher={this.props.dispatcher}
+            repository={popup.repository}
+            branchName={popup.branchName}
+            onDismissed={onPopupDismissedFn}
+          />
+        )
       default:
         return assertNever(popup, `Unknown popup type: ${popup}`)
     }
@@ -3551,6 +3564,85 @@ export class App extends React.Component<IAppProps, IAppState> {
     )
   }
 
+  private onPullRebase = () => {
+    const selection = this.state.selectedState
+    if (!selection || selection.type !== SelectionType.Repository) {
+      return
+    }
+    this.props.dispatcher.pullRebase(selection.repository)
+  }
+
+  private onRebaseOnMain = () => {
+    const selection = this.state.selectedState
+    if (!selection || selection.type !== SelectionType.Repository) {
+      return
+    }
+    this.props.dispatcher.rebaseOntoDefaultBranch(selection.repository)
+  }
+
+  private onResetToOrigin = () => {
+    const selection = this.state.selectedState
+    if (!selection || selection.type !== SelectionType.Repository) {
+      return
+    }
+
+    const state = selection.state
+    const { tip } = state.branchesState
+    if (tip.kind !== TipState.Valid) {
+      return
+    }
+
+    this.props.dispatcher.showPopup({
+      type: PopupType.ConfirmResetToOrigin,
+      repository: selection.repository,
+      branchName: tip.branch.name,
+    })
+  }
+
+  private renderGitActionButtons() {
+    const selection = this.state.selectedState
+    if (!selection || selection.type !== SelectionType.Repository) {
+      return null
+    }
+
+    const state = selection.state
+    const { tip } = state.branchesState
+    const disabled =
+      state.isPushPullFetchInProgress || tip.kind !== TipState.Valid
+
+    return (
+      <>
+        <ToolbarButton
+          title="Pull rebase"
+          description="Fetch & pull --rebase"
+          icon={octicons.repoPull}
+          style={ToolbarButtonStyle.Subtitle}
+          className="git-action-button"
+          disabled={disabled}
+          onClick={this.onPullRebase}
+        />
+        <ToolbarButton
+          title="Rebase on main"
+          description="Fetch & rebase origin/main"
+          icon={octicons.gitBranch}
+          style={ToolbarButtonStyle.Subtitle}
+          className="git-action-button"
+          disabled={disabled}
+          onClick={this.onRebaseOnMain}
+        />
+        <ToolbarButton
+          title="Reset to origin"
+          description="Reset branch to origin"
+          icon={octicons.alert}
+          style={ToolbarButtonStyle.Subtitle}
+          className="git-action-button"
+          disabled={disabled}
+          onClick={this.onResetToOrigin}
+        />
+      </>
+    )
+  }
+
   private renderToolbar() {
     /**
      * No toolbar if we're in the blank slate view.
@@ -3563,6 +3655,7 @@ export class App extends React.Component<IAppProps, IAppState> {
       <Toolbar id="desktop-app-toolbar">
         {this.renderBranchToolbarButton()}
         {this.renderPushPullToolbarButton()}
+        {this.renderGitActionButtons()}
       </Toolbar>
     )
   }

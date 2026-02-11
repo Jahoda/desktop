@@ -109,6 +109,7 @@ export enum PopupType {
   CommitProgress = 'CommitProgress',
   ImportFromGitHubDesktop = 'ImportFromGitHubDesktop',
   FileEditor = 'FileEditor',
+  ConfirmResetToOrigin = 'ConfirmResetToOrigin',
 }
 
 interface IBasePopup {
@@ -488,5 +489,10 @@ export type PopupDetail =
       type: PopupType.FileEditor
       repository: Repository
       file: WorkingDirectoryFileChange
+    }
+  | {
+      type: PopupType.ConfirmResetToOrigin
+      repository: Repository
+      branchName: string
     }
 export type Popup = IBasePopup & PopupDetail

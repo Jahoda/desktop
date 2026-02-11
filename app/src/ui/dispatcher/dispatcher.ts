@@ -785,6 +785,11 @@ export class Dispatcher {
     return this.appStore._pullRebase(repository)
   }
 
+  /** Reset the current branch to match origin (after confirmation). */
+  public resetToOrigin(repository: Repository): Promise<void> {
+    return this.appStore._resetToOrigin(repository)
+  }
+
   /** Fetch a specific refspec for the repository. */
   public fetchRefspec(
     repository: Repository,

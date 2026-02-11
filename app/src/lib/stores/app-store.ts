@@ -199,6 +199,7 @@ import {
   rebaseOntoDefaultBranch,
   IRebaseOntoResult,
 } from '../git/rebase-onto'
+import { resetToOrigin as resetToOriginGit } from '../git/reset-to-origin'
 import {
   installGlobalLFSFilters,
   installLFSHooks,
@@ -6186,6 +6187,47 @@ export class AppStore extends TypedBaseStore<IAppState> {
     await this._refreshRepository(repository)
 
     return result
+  }
+
+  /** Reset the current branch to match origin. See `Dispatcher`. */
+  public async _resetToOrigin(repository: Repository): Promise<void> {
+    const state = this.repositoryStateCache.get(repository)
+    const { branchesState } = state
+    const { tip } = branchesState
+
+    if (tip.kind !== TipState.Valid) {
+      return
+    }
+
+    const branchName = tip.branch.name
+    const gitStore = this.gitStoreCache.get(repository)
+    const remote = gitStore.currentRemote
+
+    if (!remote) {
+      return
+    }
+
+    await this.withPushPullFetch(repository, async () => {
+      try {
+        this.updatePushPullFetchProgress(repository, {
+          kind: 'generic',
+          title: `Resetting to origin/${branchName}`,
+          value: 0,
+        })
+
+        await resetToOriginGit(repository, branchName, remote.url)
+
+        this.updatePushPullFetchProgress(repository, {
+          kind: 'generic',
+          title: 'Refreshing repository',
+          value: 0.8,
+        })
+
+        await this._refreshRepository(repository)
+      } finally {
+        this.updatePushPullFetchProgress(repository, null)
+      }
+    })
   }
 
   /** This shouldn't be called directly. See `Dispatcher`. */
