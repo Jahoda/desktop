@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { clipboard, ipcRenderer, shell } from 'electron'
+import { ipcRenderer, shell } from 'electron'
+import { writeClipboardText } from '../main-process-proxy'
 import '@xterm/xterm/css/xterm.css'
 
 interface ITerminalViewProps {
@@ -277,7 +278,7 @@ export class TerminalView extends React.Component<ITerminalViewProps> {
       if (isMeta && e.key === 'c') {
         const sel = this.terminal.getSelection()
         if (sel) {
-          clipboard.writeText(sel)
+          writeClipboardText(sel)
           return false
         }
         return true

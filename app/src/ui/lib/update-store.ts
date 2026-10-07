@@ -24,6 +24,7 @@ import { offsetFromNow } from '../../lib/offset-from'
 import { gte, SemVer } from 'semver'
 import { getVersion } from './app-proxy'
 import { getUserAgent } from '../../lib/http'
+import { enableAutoUpdates } from '../../lib/gait/updates'
 
 /** The last version a showcase was seen. */
 export const lastShowCaseVersionSeen = 'version-of-last-showcase'
@@ -198,6 +199,11 @@ class UpdateStore {
    *                       attempt to retrieve the latest available deployment.
    */
   public async checkForUpdates(inBackground: boolean, skipGuidCheck: boolean) {
+    // Gait: never check GitHub Desktop's update feed (see lib/gait/updates.ts)
+    if (!enableAutoUpdates) {
+      return
+    }
+
     // An update has been downloaded and the app is waiting to be restarted.
     // Checking for updates again may result in the running app being nuked
     // when it finds a subsequent update on Windows, or the "Quit and Update"

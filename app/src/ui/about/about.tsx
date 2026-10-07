@@ -18,6 +18,7 @@ import { encodePathAsUrl } from '../../lib/path'
 import { isOSNoLongerSupportedByElectron } from '../../lib/get-os'
 import { AriaLiveContainer } from '../accessibility/aria-live-container'
 import { formatDate } from '../../lib/format-date'
+import { enableAutoUpdates } from '../../lib/gait/updates'
 
 const logoPath = __DARWIN__
   ? 'static/logo-64x64@2x.png'
@@ -96,7 +97,7 @@ export class About extends React.Component<IAboutProps> {
   }
 
   private renderUpdateButton() {
-    if (!this.canCheckForUpdates) {
+    if (!this.canCheckForUpdates || !enableAutoUpdates) {
       return null
     }
 
@@ -144,6 +145,15 @@ export class About extends React.Component<IAboutProps> {
   private renderUpdateDetails() {
     if (__LINUX__) {
       return null
+    }
+
+    if (!enableAutoUpdates) {
+      return (
+        <p>
+          Automatic updates are disabled. Gait Desktop is updated by building it
+          from source.
+        </p>
+      )
     }
 
     if (!this.canCheckForUpdates) {
@@ -268,12 +278,7 @@ export class About extends React.Component<IAboutProps> {
         {this.renderUpdateErrors()}
         <DialogContent>
           <Row className="logo">
-            <img
-              src={DesktopLogo}
-              alt="Gait Desktop"
-              width="64"
-              height="64"
-            />
+            <img src={DesktopLogo} alt="Gait Desktop" width="64" height="64" />
           </Row>
           <h1 id={titleId}>About {name}</h1>
           <p className="no-padding">

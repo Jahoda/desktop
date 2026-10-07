@@ -1,6 +1,7 @@
 import * as React from 'react'
 import * as Path from 'path'
-import { ipcRenderer, clipboard } from 'electron'
+import { ipcRenderer } from 'electron'
+import { writeClipboardText } from '../main-process-proxy'
 
 interface ICodeBlockProps {
   readonly code: string
@@ -27,7 +28,7 @@ export class CodeBlock extends React.Component<
   }
 
   private onCopy = () => {
-    clipboard.writeText(this.props.code)
+    writeClipboardText(this.props.code)
     this.setState({ copied: true })
     setTimeout(() => this.setState({ copied: false }), 2000)
   }
