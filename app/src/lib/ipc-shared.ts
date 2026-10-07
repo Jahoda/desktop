@@ -67,6 +67,12 @@ export type RequestChannels = {
   focus: () => void
   blur: () => void
   'update-accounts': (accounts: ReadonlyArray<EndpointToken>) => void
+  'resolve-image-token': (
+    requestId: number,
+    endpoint: string,
+    token: string
+  ) => void
+  'resolved-image-token': (requestId: number, token: string | null) => void
   'quit-and-install-updates': () => void
   'quit-app': () => void
   'minimize-window': () => void
@@ -80,6 +86,7 @@ export type RequestChannels = {
   'auto-updater-update-downloaded': () => void
   'native-theme-updated': () => void
   'set-native-theme-source': (themeName: ThemeSource) => void
+  'update-window-background-color': (color: string) => void
   'focus-window': () => void
   'notification-event': NotificationCallback<DesktopAliveEvent>
   'set-window-zoom-factor': (zoomFactor: number) => void
@@ -110,9 +117,12 @@ export type RequestResponseChannels = {
   'get-path': (path: PathType) => Promise<string>
   'get-app-architecture': () => Promise<Architecture>
   'get-app-path': () => Promise<string>
+  'get-exec-path': () => Promise<string>
   'is-running-under-arm64-translation': () => Promise<boolean>
   'move-to-trash': (path: string) => Promise<void>
   'show-item-in-folder': (path: string) => Promise<void>
+  'write-clipboard-text': (text: string) => Promise<void>
+  'confirm-reveal-directory': () => Promise<boolean>
   'show-contextual-menu': (
     items: ReadonlyArray<ISerializableMenuItem>,
     addSpellCheckMenu: boolean

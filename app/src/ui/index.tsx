@@ -4,6 +4,8 @@ import * as React from 'react'
 import * as ReactDOM from 'react-dom'
 import * as Path from 'path'
 import { App } from './app'
+import { API } from '../lib/api'
+import { installAuthenticatedImageTokenHandler } from '../lib/authenticated-image-token-handler'
 import {
   Dispatcher,
   externalEditorErrorHandler,
@@ -27,6 +29,7 @@ import {
   AppStore,
   GitHubUserStore,
   CloningRepositoriesStore,
+  CopilotStore,
   IssuesStore,
   SignInStore,
   RepositoriesStore,
@@ -255,6 +258,9 @@ const statsStore = new StatsStore(
 )
 
 const accountsStore = new AccountsStore(localStorage, TokenStore)
+API.setTokenProvider(accountsStore.resolveToken)
+API.onTokenInvalidated(accountsStore.handleTokenInvalidated)
+installAuthenticatedImageTokenHandler(accountsStore.resolveToken)
 
 const signInStore = new SignInStore(accountsStore)
 
@@ -291,6 +297,8 @@ const aheadBehindStore = new AheadBehindStore()
 
 const aliveStore = new AliveStore(accountsStore)
 
+const copilotStore = new CopilotStore(accountsStore)
+
 const notificationsStore = new NotificationsStore(
   accountsStore,
   aliveStore,
@@ -315,7 +323,8 @@ const appStore = new AppStore(
   pullRequestCoordinator,
   repositoryStateManager,
   apiRepositoriesStore,
-  notificationsStore
+  notificationsStore,
+  copilotStore
 )
 
 appStore.onDidUpdate(state => {

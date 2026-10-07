@@ -53,6 +53,7 @@ interface IRepositoryViewProps {
   readonly hideWhitespaceInHistoryDiff: boolean
   readonly showSideBySideDiff: boolean
   readonly showDiffCheckMarks: boolean
+  readonly preferAbsoluteDates: boolean
   readonly askForConfirmationOnDiscardChanges: boolean
   readonly askForConfirmationOnCommitFilteredChanges: boolean
   readonly askForConfirmationOnDiscardStash: boolean
@@ -117,21 +118,28 @@ interface IRepositoryViewProps {
   readonly showChangesFilter: boolean
 
   /**
-   * Whether there are any hooks in the repository that could be
-   * skipped during commit with the --no-verify flag
-   */
-  readonly hasCommitHooks: boolean
-
-  /**
    * Whether or not to skip blocking commit hooks when creating commits
    * by means of passing the `--no-verify` flag to git commit
    */
   readonly skipCommitHooks: boolean
 
+  /**
+   * Whether or not to add a `Signed-off-by` trailer to commit messages
+   * by means of passing the `--signoff` flag to git commit
+   */
+  readonly signOffCommits: boolean
+
+  /**
+   * Whether or not to allow creating a commit without any file changes
+   * by means of passing the `--allow-empty` flag to git commit.
+   * This option resets to false after each commit.
+   */
+  readonly allowEmptyCommit: boolean
+
   /** Callback to set commit options for the given repository */
   readonly onUpdateCommitOptions: (
     repository: Repository,
-    options: CommitOptions
+    options: Partial<CommitOptions>
   ) => void
 }
 
@@ -312,8 +320,9 @@ export class RepositoryView extends React.Component<
         commitSpellcheckEnabled={this.props.commitSpellcheckEnabled}
         showCommitLengthWarning={this.props.showCommitLengthWarning}
         showChangesFilter={this.props.showChangesFilter}
-        hasCommitHooks={this.props.hasCommitHooks}
         skipCommitHooks={this.props.skipCommitHooks}
+        signOffCommits={this.props.signOffCommits}
+        allowEmptyCommit={this.props.allowEmptyCommit}
         onUpdateCommitOptions={this.props.onUpdateCommitOptions}
       />
     )
@@ -370,6 +379,7 @@ export class RepositoryView extends React.Component<
           this.props.askForConfirmationOnCheckoutCommit
         }
         accounts={this.props.accounts}
+        preferAbsoluteDates={this.props.preferAbsoluteDates}
       />
     )
   }

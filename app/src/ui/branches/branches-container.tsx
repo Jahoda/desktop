@@ -34,6 +34,7 @@ import { DragType, DropTargetType } from '../../models/drag-drop'
 import {
   enablePullRequestQuickView,
   enableResizingToolbarButtons,
+  enableWorktreeSupport,
 } from '../../lib/feature-flag'
 import { PullRequestQuickView } from '../pull-request-quick-view'
 import { Emoji } from '../../lib/emoji'
@@ -51,6 +52,11 @@ interface IBranchesContainerProps {
   readonly onRenameBranch: (branchName: string) => void
   readonly onDeleteBranch: (branchName: string) => void
   readonly onOpenWorktree: (branchName: string) => void
+
+  readonly onCheckoutInNewWorktree?: (branch: Branch) => void
+
+  /** Optional callback to checkout a PR in a new worktree */
+  readonly onCheckoutPRInNewWorktree?: (pullRequest: PullRequest) => void
 
   /** The pull request associated with the current branch. */
   readonly currentPullRequest: PullRequest | null
@@ -291,6 +297,11 @@ export class BranchesContainer extends React.Component<
             onRenameBranch={this.props.onRenameBranch}
             onDeleteBranch={this.props.onDeleteBranch}
             onOpenWorktree={this.props.onOpenWorktree}
+            onCheckoutInNewWorktree={
+              enableWorktreeSupport()
+                ? this.props.onCheckoutInNewWorktree
+                : undefined
+            }
           />
         )
       case BranchesTab.PullRequests: {
@@ -384,6 +395,11 @@ export class BranchesContainer extends React.Component<
         isLoadingPullRequests={this.props.isLoadingPullRequests}
         onMouseEnterPullRequest={this.onMouseEnterPullRequestListItem}
         onMouseLeavePullRequest={this.onMouseLeavePullRequestListItem}
+        onCheckoutInNewWorktree={
+          enableWorktreeSupport()
+            ? this.props.onCheckoutPRInNewWorktree
+            : undefined
+        }
       />
     )
   }

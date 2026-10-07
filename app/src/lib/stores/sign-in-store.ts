@@ -16,11 +16,11 @@ import {
 } from '../../lib/api'
 
 import { TypedBaseStore } from './base-store'
-import uuid from 'uuid'
 import { IOAuthAction } from '../parse-app-url'
 import { shell } from '../app-shell'
 import noop from 'lodash/noop'
 import { AccountsStore } from './accounts-store'
+import { isGHES } from '../endpoint-capabilities'
 
 /**
  * An enumeration of the possible steps that the sign in
@@ -120,6 +120,9 @@ export interface IAuthenticationState extends ISignInState {
    * instance.
    */
   readonly endpoint: string
+
+  /** Whether Git supplied this unfamiliar Enterprise Server endpoint. */
+  readonly isUnrecognizedEnterpriseServer?: boolean
 
   readonly resultCallback: (result: SignInResult) => void
 
@@ -282,7 +285,7 @@ export class SignInStore extends TypedBaseStore<SignInState | null> {
       }
     }
 
-    const csrfToken = uuid()
+    const csrfToken = crypto.randomUUID()
 
     new Promise<Account>((resolve, reject) => {
       const { endpoint, resultCallback } = currentState
@@ -290,6 +293,10 @@ export class SignInStore extends TypedBaseStore<SignInState | null> {
       this.setState({
         kind: SignInStep.Authentication,
         endpoint,
+        isUnrecognizedEnterpriseServer:
+          currentState.kind === SignInStep.Authentication
+            ? currentState.isUnrecognizedEnterpriseServer
+            : undefined,
         resultCallback,
         error: null,
         loading: true,
@@ -380,19 +387,16 @@ export class SignInStore extends TypedBaseStore<SignInState | null> {
   }
 
   /**
-   * Attempt to advance from the EndpointEntry step with the given endpoint
-   * url. This method must only be called when the store is in the authentication
-   * step or an error will be thrown.
+   * Select an endpoint from the entry or existing-account step.
    *
-   * The provided endpoint url will be validated for syntactic correctness as
-   * well as connectivity before the promise resolves. If the endpoint url is
-   * invalid or the host can't be reached the promise will be rejected and the
-   * sign in state updated with an error to be presented to the user.
-   *
-   * If validation is successful the store will advance to the authentication
-   * step.
+   * Invalid URLs leave the current step with an error. When isEndpointFromGit
+   * is true, the authentication state records unfamiliar Enterprise Server
+   * endpoints so the UI can explain how to verify them.
    */
-  public async setEndpoint(url: string): Promise<void> {
+  public async setEndpoint(
+    url: string,
+    isEndpointFromGit = false
+  ): Promise<void> {
     const currentState = this.state
 
     if (
@@ -423,7 +427,7 @@ export class SignInStore extends TypedBaseStore<SignInState | null> {
       let error = e
       if (e.name === InvalidURLErrorName) {
         error = new Error(
-          `The GitHub Enterprise instance address doesn't appear to be a valid URL. We're expecting something like https://github.example.com.`
+          `The GitHub Enterprise instance address doesn't appear to be a valid URL. We're expecting something like https://example.ghe.com.`
         )
       } else if (e.name === InvalidProtocolErrorName) {
         error = new Error(
@@ -452,6 +456,7 @@ export class SignInStore extends TypedBaseStore<SignInState | null> {
       this.setState({
         kind: SignInStep.Authentication,
         endpoint,
+        isUnrecognizedEnterpriseServer: isEndpointFromGit && isGHES(endpoint),
         error: null,
         loading: false,
         resultCallback: currentState.resultCallback,

@@ -2,7 +2,6 @@
 /// <reference path="./globals.d.ts" />
 
 import * as cp from 'child_process'
-import packager, { OfficialArch, OsxNotarizeOptions } from 'electron-packager'
 import frontMatter from 'front-matter'
 import * as os from 'os'
 import * as path from 'path'
@@ -24,6 +23,19 @@ export interface ILicense {
   readonly hidden: boolean
 }
 
+type DesktopPackageArch = 'arm64' | 'x64'
+type DesktopPackagePlatform = 'darwin' | 'linux' | 'win32'
+
+interface IDesktopPackagerModule {
+  readonly packager: (options: object) => Promise<ReadonlyArray<string>>
+}
+
+interface IOSXNotarizeOptions {
+  readonly appleId: string
+  readonly appleIdPassword: string
+  readonly teamId: string
+}
+
 import {
   getBundleID,
   getCompanyName,
@@ -36,7 +48,7 @@ import {
   getDistArchitecture,
   getDistRoot,
   getExecutableName,
-  getIconFileName,
+  getIconDirectory,
   isPublishable,
 } from './dist-info'
 
@@ -52,9 +64,13 @@ import {
 } from 'fs'
 import { updateLicenseDump } from './licenses/update-license-dump'
 import { verifyInjectedSassVariables } from './validate-sass/validate-all'
+import { join } from 'path'
+import assert from 'assert'
+import { copyCopilotDependency } from './copilot'
 
 const isPublishableBuild = isPublishable()
 const isDevelopmentBuild = getChannel() === 'development'
+const shouldSkipPackaging = process.env.DESKTOP_SKIP_PACKAGE === '1'
 
 const projectRoot = path.join(__dirname, '..')
 const entitlementsSuffix = isDevelopmentBuild ? '-dev' : ''
@@ -110,6 +126,11 @@ verifyInjectedSassVariables(outRoot)
     })
   })
   .then(() => {
+    if (shouldSkipPackaging) {
+      console.log('Skipping packaging…')
+      return [outRoot]
+    }
+
     console.log('Packaging…')
     return packageApp()
   })
@@ -121,10 +142,15 @@ verifyInjectedSassVariables(outRoot)
     console.log(`Built to ${appPaths}`)
   })
 
-function packageApp() {
+async function packageApp() {
+  const packagerModuleName = '@electron/packager'
+  const { packager }: IDesktopPackagerModule = await import(packagerModuleName)
+
   // not sure if this is needed anywhere, so I'm just going to inline it here
   // for now and see what the future brings...
-  const toPackagePlatform = (platform: NodeJS.Platform) => {
+  const toPackagePlatform = (
+    platform: NodeJS.Platform
+  ): DesktopPackagePlatform => {
     if (platform === 'win32' || platform === 'darwin' || platform === 'linux') {
       return platform
     }
@@ -133,7 +159,9 @@ function packageApp() {
     )
   }
 
-  const toPackageArch = (targetArch: string | undefined): OfficialArch => {
+  const toPackageArch = (
+    targetArch: string | undefined
+  ): DesktopPackageArch => {
     if (targetArch === undefined) {
       targetArch = os.arch()
     }
@@ -162,21 +190,34 @@ function packageApp() {
     )
   }
 
+  const iconPath = getIconDirectory()
+  const assetsCarPath = join(iconPath, 'Assets.car')
+  assert(
+    existsSync(assetsCarPath),
+    `Unable to find Assets.car at ${assetsCarPath}`
+  )
+
   return packager({
     name: getExecutableName(),
     platform: toPackagePlatform(process.platform),
     arch: toPackageArch(process.env.TARGET_ARCH),
     asar: false, // TODO: Probably wanna enable this down the road.
     out: getDistRoot(),
-    icon: path.join(projectRoot, 'app', 'static', 'logos', getIconFileName()),
+    // Packager probes for a sibling .icon file and requires macOS 26 to compile
+    // it. Use a distinct basename so older build hosts use the prebuilt ICNS.
+    icon: join(
+      iconPath,
+      process.platform === 'darwin' ? 'icon-logo-legacy.icns' : 'icon-logo'
+    ),
+    extraResource: [assetsCarPath],
     dir: outRoot,
     overwrite: true,
     tmpdir: false,
-    derefSymlinks: false,
+    derefSymlinks: true,
     prune: false, // We'll prune them ourselves below.
     ignore: [
       new RegExp('/node_modules/electron($|/)'),
-      new RegExp('/node_modules/electron-packager($|/)'),
+      new RegExp('/node_modules/@electron/packager($|/)'),
       new RegExp('/\\.git($|/)'),
       new RegExp('/node_modules/\\.bin($|/)'),
     ],
@@ -328,6 +369,14 @@ function copyDependencies() {
     { recursive: true, verbatimSymlinks: true }
   )
 
+  console.log('  Copying copilot…')
+  copyCopilotDependency(
+    path.join(projectRoot, 'app', 'node_modules'),
+    path.join(outRoot, 'copilot'),
+    process.platform,
+    getDistArchitecture()
+  )
+
   // Dev builds for macOS require a SSH wrapper to use SSH_ASKPASS
   if (process.platform === 'darwin' && isDevelopmentBuild) {
     console.log('  Copying ssh-wrapper')
@@ -463,7 +512,7 @@ ${licenseText}`
   rmSync(chooseALicense, { recursive: true, force: true })
 }
 
-function getNotarizationOptions(): OsxNotarizeOptions | undefined {
+function getNotarizationOptions(): IOSXNotarizeOptions | undefined {
   const {
     APPLE_ID: appleId,
     APPLE_ID_PASSWORD: appleIdPassword,
@@ -471,6 +520,6 @@ function getNotarizationOptions(): OsxNotarizeOptions | undefined {
   } = process.env
 
   return appleId && appleIdPassword && teamId
-    ? { tool: 'notarytool', appleId, appleIdPassword, teamId }
+    ? { appleId, appleIdPassword, teamId }
     : undefined
 }

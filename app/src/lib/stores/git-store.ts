@@ -30,8 +30,6 @@ import {
   ErrorWithMetadata,
   IErrorMetadata,
 } from '../error-with-metadata'
-import { queueWorkHigh } from '../../lib/queue-work'
-
 import {
   reset,
   GitResetMode,
@@ -1466,7 +1464,10 @@ export class GitStore extends BaseStore {
 
   /** Update the last fetched date. */
   public async updateLastFetched() {
-    const fetchHeadPath = Path.join(this.repository.path, '.git', 'FETCH_HEAD')
+    const fetchHeadPath = Path.join(
+      this.repository.resolvedGitDir,
+      'FETCH_HEAD'
+    )
 
     try {
       const fstat = await stat(fetchHeadPath)
@@ -1551,14 +1552,11 @@ export class GitStore extends BaseStore {
 
     const submodules = await listSubmodules(this.repository)
 
-    await queueWorkHigh(files, async file => {
+    for (const file of files) {
       const foundSubmodule = submodules.some(s => s.path === file.path)
 
       if (file.status.kind !== AppFileStatusKind.Deleted && !foundSubmodule) {
         if (moveToTrash) {
-          // N.B. moveItemToTrash can take a fair bit of time which is why we're
-          // running it inside this work queue that spreads out the calls across
-          // as many animation frames as it needs to.
           try {
             await this.shell.moveItemToTrash(
               Path.resolve(this.repository.path, file.path)
@@ -1601,7 +1599,7 @@ export class GitStore extends BaseStore {
         pathsToCheckout.push(file.path)
         pathsToReset.push(file.path)
       }
-    })
+    }
 
     // Check the index to see which files actually have changes there as compared to HEAD
     const changedFilesInIndex = await getIndexChanges(this.repository)
