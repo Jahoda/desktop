@@ -1,6 +1,7 @@
 import { getSHA } from './git-info'
 import { getUpdatesURL, getChannel } from '../script/dist-info'
-import { version, productName } from './package.json'
+import { version } from './package.json'
+import { productName } from './gait-branding.json'
 
 const devClientId = '3a723b10ac5575cc5bb9'
 const devClientSecret = '22c34d87789a365981ed921352a7b9a8c3f69d54'

@@ -1,9 +1,20 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert'
 import {
-  RequestChannels,
-  RequestResponseChannels,
+  RequestChannels as AllRequestChannels,
+  RequestResponseChannels as AllRequestResponseChannels,
 } from '../../src/lib/ipc-shared'
+import {
+  GaitRequestChannels,
+  GaitRequestResponseChannels,
+} from '../../src/lib/gait/ipc-channels'
+
+// Gait: verify only the upstream channels here
+type RequestChannels = Omit<AllRequestChannels, keyof GaitRequestChannels>
+type RequestResponseChannels = Omit<
+  AllRequestResponseChannels,
+  keyof GaitRequestResponseChannels
+>
 
 /**
  * These tests verify the IPC channel contract — the set of channels that
@@ -71,14 +82,6 @@ describe('IPC channel contract', () => {
     'show-installing-update',
     'install-windows-cli',
     'uninstall-windows-cli',
-    // Gait: npm scripts, terminal, Claude chat
-    'npm-script-output',
-    'npm-script-exit',
-    'pty-output',
-    'pty-exit',
-    'claude-stream-event',
-    'claude-complete',
-    'claude-error',
   ] as const
 
   const expectedResponseChannels = [
@@ -110,20 +113,6 @@ describe('IPC channel contract', () => {
     'show-notification',
     'get-notifications-permission',
     'request-notifications-permission',
-    // Gait: npm scripts, terminal, Claude chat
-    'npm-script-start',
-    'npm-script-stop',
-    'npm-scripts-list-running',
-    'pty-create',
-    'pty-write',
-    'pty-resize',
-    'pty-destroy',
-    'claude-create-session',
-    'claude-send-prompt',
-    'claude-abort',
-    'claude-destroy-session',
-    'claude-apply-code',
-    'claude-save-image',
   ] as const
 
   describe('RequestChannels', () => {

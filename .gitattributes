@@ -1,3 +1,8 @@
+# Gait: keep our branded images when merging upstream
+# (requires: git config merge.ours.driver true)
+/app/static/common/logo-64x64@2x.png merge=ours
+/app/static/linux/icon-logo.png merge=ours
+
 /app/test/fixtures/** -text
 /app/static/win32/github.sh eol=lf
 

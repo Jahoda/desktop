@@ -69,6 +69,7 @@ import { IAPIRepoRuleset } from './api'
 import { ICustomIntegration } from './custom-integration'
 import { Emoji } from './emoji'
 import { IUpdateState } from '../ui/lib/update-store'
+import { IGaitState } from './gait/gait-state'
 
 export enum SelectionType {
   Repository,
@@ -89,15 +90,11 @@ export type PossibleSelections =
     }
   | { type: SelectionType.MissingRepository; repository: Repository }
 
-/** State for an open repository tab */
-export interface ITabState {
-  readonly repository: Repository
-  readonly branchName: string | null
-}
-
 /** All of the shared app state. */
 export interface IAppState {
   readonly accounts: ReadonlyArray<Account>
+  /** Gait: tabs and panel state */
+  readonly gait: IGaitState
   /**
    * The current list of repositories tracked in the application
    */
@@ -429,21 +426,6 @@ export interface IAppState {
 
   /** Whether the changes filter is shown */
   readonly showChangesFilter: boolean
-
-  /** Whether the npm scripts panel is visible */
-  readonly showNpmScriptsPanel: boolean
-
-  /** Whether the terminal panel is visible */
-  readonly showTerminalPanel: boolean
-
-  /** Whether the Claude chat panel is visible */
-  readonly showClaudeChatPanel: boolean
-
-  /** Open repository tabs */
-  readonly openTabs: ReadonlyArray<ITabState>
-
-  /** Index of the currently active tab */
-  readonly activeTabIndex: number
 
   /** Account-scoped Copilot model selections. */
   readonly selectedCopilotModelsByAccount: CopilotModelSelectionsByAccount

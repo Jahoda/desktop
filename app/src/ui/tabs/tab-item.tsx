@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ITabState } from '../../lib/app-state'
+import { ITabState } from '../../lib/gait/gait-state'
 import classNames from 'classnames'
 import { RepoIcon } from './repo-icon'
 

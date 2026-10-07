@@ -1,0 +1,56 @@
+// Gait: additions to upstream components (app layout, toolbar, commit message)
+
+#main-content-row {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#main-content-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+#desktop-app-toolbar .toolbar-button.git-action-button {
+  width: auto;
+  min-width: 120px;
+  flex-shrink: 1;
+}
+
+.commit-message-component {
+  .description-toggle {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 2px 0;
+    margin-bottom: 2px;
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary-color);
+    user-select: none;
+
+    &:hover {
+      color: var(--text-color);
+    }
+  }
+
+  .description-toggle-arrow {
+    font-size: 9px;
+    margin-right: 4px;
+    width: 10px;
+    text-align: center;
+  }
+
+  .description-toggle-label {
+    font-weight: 600;
+    font-size: 11px;
+  }
+
+  .description-focus-container.collapsed {
+    display: none;
+  }
+}

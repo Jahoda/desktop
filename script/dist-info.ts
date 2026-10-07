@@ -154,7 +154,8 @@ export function shouldMakeDelta() {
  * Path to the directory containing all icon assets for the current release channel.
  */
 export function getIconDirectory() {
-  const devOrProd = getChannel() === 'development' ? 'dev' : 'prod'
+  // Gait: production builds use the Gait-branded icons in logos/gait
+  const devOrProd = getChannel() === 'development' ? 'dev' : 'gait'
   return join(projectRoot, 'app', 'static', 'logos', devOrProd)
 }
 

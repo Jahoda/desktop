@@ -50,13 +50,14 @@ import { DeleteBranch, DeleteRemoteBranch } from './delete-branch'
 import { CloningRepositoryView } from './cloning-repository'
 import {
   Toolbar,
+  ToolbarDropdown,
   DropdownState,
   PushPullButton,
   BranchDropdown,
   WorktreeDropdown,
   RevertProgress,
 } from './toolbar'
-import { ToolbarButton, ToolbarButtonStyle } from './toolbar/button'
+import { iconForRepository, OcticonSymbol } from './octicons'
 import * as octicons from './octicons/octicons.generated'
 import {
   showCertificateTrustDialog,
@@ -93,12 +94,6 @@ import { About } from './about'
 import { Publish } from './publish-repository'
 import { Acknowledgements } from './acknowledgements'
 import { UntrustedCertificate } from './untrusted-certificate'
-import { ImportFromGitHubDesktop } from './import/import-from-github-desktop'
-import { FileEditorDialog } from './file-editor/file-editor-dialog'
-import type {
-  IGHDAccount,
-  IGHDPreferences,
-} from '../lib/import/github-desktop-importer'
 import { NoRepositoriesView } from './no-repositories'
 import { ConfirmRemoveRepository } from './remove-repository'
 import { TermsAndConditions } from './terms-and-conditions'
@@ -174,11 +169,23 @@ import { ConfirmForcePush } from './rebase/confirm-force-push'
 import { PullRequestChecksFailed } from './notifications/pull-request-checks-failed'
 import { CICheckRunRerunDialog } from './check-runs/ci-check-run-rerun-dialog'
 import { WarnForcePushDialog } from './multi-commit-operation/dialog/warn-force-push-dialog'
+import { clamp } from '../lib/clamp'
+import { GaitTopBar, showRepositoryToolbarDropdown } from './gait/gait-top-bar'
+import { GaitMainContent } from './gait/gait-main-content'
+import { GaitGitActions } from './gait/gait-git-actions'
+import { GaitPopupContent, isGaitPopup } from './gait/gait-popups'
+import {
+  handleGaitMenuEvent,
+  installGaitShortcuts,
+} from './gait/gait-app-events'
+import { isGaitMenuEvent } from '../main-process/menu/gait-menu-event'
+import { generateRepositoryListContextMenu } from './repositories-list/repository-list-item-context-menu'
 import * as ipcRenderer from '../lib/ipc-renderer'
 import { DiscardChangesRetryDialog } from './discard-changes/discard-changes-retry-dialog'
 import { PullRequestReview } from './notifications/pull-request-review'
 import { getRepositoryType } from '../lib/git'
 import { SSHUserPassword } from './ssh/ssh-user-password'
+import { showContextualMenu } from '../lib/menu-item'
 import { UnreachableCommitsDialog } from './history/unreachable-commits-dialog'
 import { OpenPullRequestDialog } from './open-pull-request/open-pull-request-dialog'
 import { sendNonFatalException } from '../lib/helpers/non-fatal-exception'
@@ -224,13 +231,7 @@ import {
   BypassReasonType,
 } from './secret-scanning/bypass-push-protection-dialog'
 import { HookFailed } from './hook-failed/hook-failed'
-import { ConfirmResetToOrigin } from './reset-to-origin/confirm-reset-to-origin'
 import { CommitProgress } from './commit-progress/commit-progress'
-import { TabBar } from './tabs/tab-bar'
-import { NpmScriptsPanel } from './npm-scripts/npm-scripts-panel'
-import { detectMonorepoScripts, IMonorepoScripts } from '../lib/npm/script-detector'
-import { TerminalPanel } from './terminal/terminal-panel'
-import { ClaudeChatPanel } from './claude-chat/claude-chat-panel'
 import { AddWorktreeDialog } from './worktrees/add-worktree-dialog'
 import { RenameWorktreeDialog } from './worktrees/rename-worktree-dialog'
 import { DeleteWorktreeDialog } from './worktrees/delete-worktree-dialog'
@@ -288,8 +289,7 @@ export class App extends React.Component<IAppProps, IAppState> {
   private updateIntervalHandle?: number
 
   private repositoryViewRef = React.createRef<RepositoryView>()
-  private npmScriptsCache: IMonorepoScripts | null | undefined = undefined
-  private npmScriptsRepoPath: string | null = null
+  private removeGaitShortcuts: (() => void) | null = null
 
   /**
    * Gets a value indicating whether or not we're currently showing a
@@ -388,7 +388,7 @@ export class App extends React.Component<IAppProps, IAppState> {
 
   public componentWillUnmount() {
     window.clearInterval(this.updateIntervalHandle)
-    window.removeEventListener('keydown', this.onGaitKeyDown)
+    this.removeGaitShortcuts?.()
 
     if (__DARWIN__) {
       window.removeEventListener('keydown', this.onMacOSWindowKeyDown)
@@ -466,6 +466,14 @@ export class App extends React.Component<IAppProps, IAppState> {
       return
     }
 
+    if (isGaitMenuEvent(name)) {
+      return handleGaitMenuEvent(
+        name,
+        this.props.dispatcher,
+        this.state.selectedState
+      )
+    }
+
     switch (name) {
       case 'push':
         return this.push()
@@ -473,8 +481,6 @@ export class App extends React.Component<IAppProps, IAppState> {
         return this.push({ forceWithLease: true })
       case 'pull':
         return this.pull()
-      case 'pull-rebase':
-        return this.pullRebase()
       case 'fetch':
         return this.fetch()
       case 'show-changes':
@@ -525,8 +531,6 @@ export class App extends React.Component<IAppProps, IAppState> {
       case 'rebase-branch':
         this.props.dispatcher.incrementMetric('rebaseCurrentBranchMenuCount')
         return this.showRebaseDialog()
-      case 'rebase-onto-default-branch':
-        return this.rebaseOntoDefaultBranch()
       case 'show-repository-settings':
         return this.showRepositorySettings()
       case 'view-repository-on-github':
@@ -583,16 +587,6 @@ export class App extends React.Component<IAppProps, IAppState> {
         return this.resizeActiveResizable('decrease-active-resizable-width')
       case 'toggle-changes-filter':
         return this.toggleChangesFilterVisibility()
-      case 'toggle-npm-scripts-panel':
-        return this.props.dispatcher.toggleNpmScriptsPanel()
-      case 'toggle-terminal-panel':
-        return this.props.dispatcher.toggleTerminalPanel()
-      case 'toggle-claude-chat-panel':
-        return this.props.dispatcher.toggleClaudeChatPanel()
-      case 'import-from-github-desktop':
-        return this.props.dispatcher.showPopup({
-          type: PopupType.ImportFromGitHubDesktop,
-        })
       default:
         if (isTestMenuEvent(name)) {
           return showTestUI(
@@ -1059,15 +1053,6 @@ export class App extends React.Component<IAppProps, IAppState> {
     this.props.dispatcher.pull(state.repository)
   }
 
-  private async pullRebase() {
-    const state = this.state.selectedState
-    if (state == null || state.type !== SelectionType.Repository) {
-      return
-    }
-
-    this.props.dispatcher.pullRebase(state.repository)
-  }
-
   private async fetch() {
     const state = this.state.selectedState
     if (state == null || state.type !== SelectionType.Repository) {
@@ -1128,8 +1113,10 @@ export class App extends React.Component<IAppProps, IAppState> {
       window.addEventListener('keyup', this.onWindowKeyUp)
     }
 
-    // Always register global shortcuts for terminal toggle and tab switching
-    window.addEventListener('keydown', this.onGaitKeyDown)
+    this.removeGaitShortcuts = installGaitShortcuts(
+      this.props.dispatcher,
+      () => this.state.gait.openTabs.length
+    )
 
     if (__DARWIN__) {
       window.addEventListener('keydown', this.onMacOSWindowKeyDown)
@@ -1142,47 +1129,6 @@ export class App extends React.Component<IAppProps, IAppState> {
 
   private onDocumentFocus = (event: FocusEvent) => {
     this.props.dispatcher.appFocusedElementChanged()
-  }
-
-  /**
-   * Global keyboard shortcuts for Gait-specific features:
-   * terminal toggle (Cmd/Ctrl+`) and tab switching (Cmd/Ctrl+1-9).
-   */
-  private onGaitKeyDown = (event: KeyboardEvent) => {
-    if (event.defaultPrevented) {
-      return
-    }
-
-    const modifier = __DARWIN__ ? event.metaKey : event.ctrlKey
-    if (!modifier) {
-      return
-    }
-
-    // Cmd/Ctrl+` toggles terminal
-    if (event.key === '`' && !event.shiftKey && !event.altKey) {
-      event.preventDefault()
-      this.props.dispatcher.toggleTerminalPanel()
-      return
-    }
-
-    // Cmd/Ctrl+Shift+I toggles Claude chat panel
-    if (event.key === 'I' && event.shiftKey && !event.altKey) {
-      event.preventDefault()
-      this.props.dispatcher.toggleClaudeChatPanel()
-      return
-    }
-
-    // Cmd/Ctrl+1-9 switches tabs
-    if (!event.shiftKey && !event.altKey) {
-      const num = parseInt(event.key, 10)
-      if (num >= 1 && num <= 9) {
-        const tabIndex = num - 1
-        if (tabIndex < this.state.openTabs.length) {
-          event.preventDefault()
-          this.props.dispatcher.selectTab(tabIndex)
-        }
-      }
-    }
   }
 
   /**
@@ -1225,20 +1171,6 @@ export class App extends React.Component<IAppProps, IAppState> {
 
     if (this.isShowingModal) {
       return
-    }
-
-    // Cmd/Ctrl shortcuts handled by onGaitKeyDown
-    const modifier = __DARWIN__ ? event.metaKey : event.ctrlKey
-    if (modifier && !event.shiftKey && !event.altKey) {
-      const num = parseInt(event.key, 10)
-      if (num >= 1 && num <= 9) {
-        const tabIndex = num - 1
-        if (tabIndex < this.state.openTabs.length) {
-          event.preventDefault()
-          this.props.dispatcher.selectTab(tabIndex)
-          return
-        }
-      }
     }
 
     if (shouldRenderApplicationMenu()) {
@@ -1399,18 +1331,6 @@ export class App extends React.Component<IAppProps, IAppState> {
     await this.props.dispatcher.removeRepository(repository, deleteRepoFromDisk)
   }
 
-  private onImportFromGitHubDesktop = async (
-    accounts: ReadonlyArray<IGHDAccount>,
-    repositories: ReadonlyArray<string>,
-    preferences: IGHDPreferences | null
-  ) => {
-    await this.props.dispatcher.importFromGitHubDesktop(
-      accounts,
-      repositories,
-      preferences
-    )
-  }
-
   private getRepository(): Repository | CloningRepository | null {
     const state = this.state.selectedState
     if (state == null) {
@@ -1428,16 +1348,6 @@ export class App extends React.Component<IAppProps, IAppState> {
     }
 
     this.props.dispatcher.showRebaseDialog(repository)
-  }
-
-  private rebaseOntoDefaultBranch() {
-    const repository = this.getRepository()
-
-    if (!repository || repository instanceof CloningRepository) {
-      return
-    }
-
-    this.props.dispatcher.rebaseOntoDefaultBranch(repository)
   }
 
   private showRepositorySettings() {
@@ -1763,6 +1673,17 @@ export class App extends React.Component<IAppProps, IAppState> {
     }
 
     const onPopupDismissedFn = this.getOnPopupDismissedFn(popup.id)
+
+    if (isGaitPopup(popup)) {
+      return (
+        <GaitPopupContent
+          key={popup.type}
+          popup={popup}
+          dispatcher={this.props.dispatcher}
+          onDismissed={onPopupDismissedFn}
+        />
+      )
+    }
 
     switch (popup.type) {
       case PopupType.RenameBranch:
@@ -3084,34 +3005,6 @@ export class App extends React.Component<IAppProps, IAppState> {
           />
         )
       }
-      case PopupType.ImportFromGitHubDesktop:
-        return (
-          <ImportFromGitHubDesktop
-            key="import-from-github-desktop"
-            onDismissed={onPopupDismissedFn}
-            onImport={this.onImportFromGitHubDesktop}
-          />
-        )
-      case PopupType.FileEditor:
-        return (
-          <FileEditorDialog
-            key="file-editor"
-            repository={popup.repository}
-            file={popup.file}
-            dispatcher={this.props.dispatcher}
-            onDismissed={onPopupDismissedFn}
-          />
-        )
-      case PopupType.ConfirmResetToOrigin:
-        return (
-          <ConfirmResetToOrigin
-            key="confirm-reset-to-origin"
-            dispatcher={this.props.dispatcher}
-            repository={popup.repository}
-            branchName={popup.branchName}
-            onDismissed={onPopupDismissedFn}
-          />
-        )
       case PopupType.AddWorktree: {
         const allBranches =
           this.state.selectedState?.type === SelectionType.Repository
@@ -3492,133 +3385,31 @@ export class App extends React.Component<IAppProps, IAppState> {
     })
   }
 
-  private onTabClicked = (index: number) => {
-    this.props.dispatcher.selectTab(index)
-  }
-
-  private onTabClosed = (index: number) => {
-    this.props.dispatcher.closeTab(index)
-  }
-
-  private onTabMoved = (fromIndex: number, toIndex: number) => {
-    this.props.dispatcher.moveTab(fromIndex, toIndex)
-  }
-
-  private onAddRepository = () => {
-    this.onRepositoryDropdownStateChanged('open')
-  }
-
-  private renderTabBar() {
-    const { openTabs, activeTabIndex } = this.state
-
-    return (
-      <TabBar
-        tabs={openTabs}
-        activeTabIndex={activeTabIndex}
-        onTabClicked={this.onTabClicked}
-        onTabClosed={this.onTabClosed}
-        onTabMoved={this.onTabMoved}
-        onAddRepository={this.onAddRepository}
-      />
-    )
-  }
-
-  private renderNpmScriptsPanel() {
-    if (!this.state.showNpmScriptsPanel) {
-      return null
-    }
-
-    const repo = this.getRepository()
-    if (!repo || repo instanceof CloningRepository) {
-      return null
-    }
-
-    // Detect scripts lazily and cache per repo path
-    if (this.npmScriptsRepoPath !== repo.path) {
-      this.npmScriptsRepoPath = repo.path
-      this.npmScriptsCache = undefined
-      detectMonorepoScripts(repo.path).then(result => {
-        this.npmScriptsCache = result
-        this.forceUpdate()
-      })
-    }
-
-    if (this.npmScriptsCache === undefined || this.npmScriptsCache === null) {
-      return null
-    }
-
-    return (
-      <NpmScriptsPanel
-        repoPath={repo.path}
-        rootScripts={this.npmScriptsCache.rootScripts}
-        workspaces={this.npmScriptsCache.workspaces}
-        manager={this.npmScriptsCache.manager}
-      />
-    )
-  }
-
-  private renderTerminalPanel() {
-    if (!this.state.showTerminalPanel) {
-      return null
-    }
-
-    const repo = this.getRepository()
-    if (!repo || repo instanceof CloningRepository) {
-      return null
-    }
-
-    return <TerminalPanel cwd={repo.path} repoId={repo.id} />
-  }
-
-  private renderClaudeChatPanel() {
-    if (!this.state.showClaudeChatPanel) {
-      return null
-    }
-
-    const repo = this.getRepository()
-    if (!repo || repo instanceof CloningRepository) {
-      return null
-    }
-
-    let branchName: string | null = null
-    const { selectedState } = this.state
-    if (
-      selectedState !== null &&
-      selectedState.type === SelectionType.Repository
-    ) {
-      const { tip } = selectedState.state.branchesState
-      if (tip.kind === TipState.Valid) {
-        branchName = tip.branch.name
-      }
-    }
-
-    return (
-      <ClaudeChatPanel
-        cwd={repo.path}
-        repoId={repo.id}
-        branchName={branchName}
-      />
-    )
-  }
-
   private renderApp() {
     return (
       <div
         id="desktop-app-contents"
         className={this.getDesktopAppContentsClassNames()}
       >
-        {this.renderTabBar()}
-        {this.renderRepositoryFoldout()}
+        <GaitTopBar
+          dispatcher={this.props.dispatcher}
+          gait={this.state.gait}
+          isRepositoryFoldoutOpen={
+            this.state.currentFoldout?.type === FoldoutType.Repository
+          }
+          renderRepositoryList={this.renderRepositoryList}
+          onRepositoryDropdownStateChanged={
+            this.onRepositoryDropdownStateChanged
+          }
+        />
         {this.renderToolbar()}
         {this.renderBanner()}
-        <div id="main-content-row">
-          <div id="main-content-column">
-            {this.renderRepository()}
-            {this.renderNpmScriptsPanel()}
-            {this.renderTerminalPanel()}
-          </div>
-          {this.renderClaudeChatPanel()}
-        </div>
+        <GaitMainContent
+          gait={this.state.gait}
+          selectedState={this.state.selectedState}
+        >
+          {this.renderRepository()}
+        </GaitMainContent>
         {this.renderPopups()}
         {this.renderDragElement()}
       </div>
@@ -3749,6 +3540,115 @@ export class App extends React.Component<IAppProps, IAppState> {
       // Otherwise pop open repositories panel
       this.onRepositoryDropdownStateChanged('open')
     }
+  }
+
+  private renderRepositoryToolbarButton() {
+    const selection = this.state.selectedState
+
+    const repository = selection ? selection.repository : null
+
+    let icon: OcticonSymbol
+    let title: string
+    if (repository) {
+      const alias = repository instanceof Repository ? repository.alias : null
+      icon = iconForRepository(repository)
+      title = alias ?? repository.name
+    } else if (this.state.repositories.length > 0) {
+      icon = octicons.repo
+      title = __DARWIN__ ? 'Select a Repository' : 'Select a repository'
+    } else {
+      icon = octicons.repo
+      title = __DARWIN__ ? 'No Repositories' : 'No repositories'
+    }
+
+    const isOpen =
+      this.state.currentFoldout &&
+      this.state.currentFoldout.type === FoldoutType.Repository
+
+    const currentState: DropdownState = isOpen ? 'open' : 'closed'
+
+    const tooltip = repository && !isOpen ? repository.path : undefined
+
+    const foldoutWidth = clamp(this.state.sidebarWidth)
+
+    const foldoutStyle: React.CSSProperties = {
+      position: 'absolute',
+      marginLeft: 0,
+      width: foldoutWidth,
+      minWidth: foldoutWidth,
+      height: '100%',
+      top: 0,
+    }
+
+    /** The dropdown focus trap will stop focus event propagation we made need
+     * in some of our dialogs (noticed with Lists). Disabled this when dialogs
+     * are open */
+    const enableFocusTrap = this.state.currentPopup === null
+
+    return (
+      <ToolbarDropdown
+        icon={icon}
+        title={title}
+        description={__DARWIN__ ? 'Current Repository' : 'Current repository'}
+        tooltip={tooltip}
+        foldoutStyle={foldoutStyle}
+        onContextMenu={this.onRepositoryToolbarButtonContextMenu}
+        onDropdownStateChanged={this.onRepositoryDropdownStateChanged}
+        dropdownContentRenderer={this.renderRepositoryList}
+        dropdownState={currentState}
+        enableFocusTrap={enableFocusTrap}
+      />
+    )
+  }
+
+  private onRepositoryToolbarButtonContextMenu = () => {
+    const repository = this.state.selectedState?.repository
+    if (repository === undefined) {
+      return
+    }
+
+    const onChangeRepositoryAlias = (repository: Repository) => {
+      this.props.dispatcher.showPopup({
+        type: PopupType.ChangeRepositoryAlias,
+        repository,
+      })
+    }
+
+    const onRemoveRepositoryAlias = (repository: Repository) => {
+      this.props.dispatcher.changeRepositoryAlias(repository, null)
+    }
+
+    const onCreateWorktree = (repository: Repository) => {
+      this.props.dispatcher.showPopup({
+        type: PopupType.AddWorktree,
+        repository,
+      })
+    }
+
+    const onShowWorktrees = () => {
+      this.showWorktrees()
+    }
+
+    const items = generateRepositoryListContextMenu({
+      onRemoveRepository: this.removeRepository,
+      onShowRepository: this.showRepository,
+      onOpenInShell: this.openInShell,
+      onOpenInExternalEditor: this.openInExternalEditor,
+      askForConfirmationOnRemoveRepository:
+        this.state.askForConfirmationOnRepositoryRemoval,
+      externalEditorLabel: this.externalEditorLabel,
+      onChangeRepositoryAlias: onChangeRepositoryAlias,
+      onRemoveRepositoryAlias: onRemoveRepositoryAlias,
+      onViewOnGitHub: this.viewOnGitHub,
+      onCreateWorktree: enableWorktreeSupport() ? onCreateWorktree : undefined,
+      onShowWorktrees: enableWorktreeSupport() ? onShowWorktrees : undefined,
+      repository: repository,
+      shellLabel: this.state.useCustomShell
+        ? undefined
+        : this.state.selectedShell,
+    })
+
+    showContextualMenu(items)
   }
 
   private renderPushPullToolbarButton() {
@@ -4061,109 +3961,6 @@ export class App extends React.Component<IAppProps, IAppState> {
     this.props.dispatcher.clearBanner()
   }
 
-  private renderRepositoryFoldout() {
-    const isOpen =
-      this.state.currentFoldout &&
-      this.state.currentFoldout.type === FoldoutType.Repository
-
-    if (!isOpen) {
-      return null
-    }
-
-    return (
-      <div className="repository-foldout-panel">
-        <div
-          className="repository-foldout-overlay"
-          onClick={() =>
-            this.props.dispatcher.closeFoldout(FoldoutType.Repository)
-          }
-        />
-        <div className="repository-foldout-content">
-          {this.renderRepositoryList()}
-        </div>
-      </div>
-    )
-  }
-
-  private onPullRebase = () => {
-    const selection = this.state.selectedState
-    if (!selection || selection.type !== SelectionType.Repository) {
-      return
-    }
-    this.props.dispatcher.pullRebase(selection.repository)
-  }
-
-  private onRebaseOnMain = () => {
-    const selection = this.state.selectedState
-    if (!selection || selection.type !== SelectionType.Repository) {
-      return
-    }
-    this.props.dispatcher.rebaseOntoDefaultBranch(selection.repository)
-  }
-
-  private onResetToOrigin = () => {
-    const selection = this.state.selectedState
-    if (!selection || selection.type !== SelectionType.Repository) {
-      return
-    }
-
-    const state = selection.state
-    const { tip } = state.branchesState
-    if (tip.kind !== TipState.Valid) {
-      return
-    }
-
-    this.props.dispatcher.showPopup({
-      type: PopupType.ConfirmResetToOrigin,
-      repository: selection.repository,
-      branchName: tip.branch.name,
-    })
-  }
-
-  private renderGitActionButtons() {
-    const selection = this.state.selectedState
-    if (!selection || selection.type !== SelectionType.Repository) {
-      return null
-    }
-
-    const state = selection.state
-    const { tip } = state.branchesState
-    const disabled =
-      state.isPushPullFetchInProgress || tip.kind !== TipState.Valid
-
-    return (
-      <>
-        <ToolbarButton
-          title="Pull rebase"
-          description="Fetch & pull --rebase"
-          icon={octicons.repoPull}
-          style={ToolbarButtonStyle.Subtitle}
-          className="git-action-button"
-          disabled={disabled}
-          onClick={this.onPullRebase}
-        />
-        <ToolbarButton
-          title="Rebase on main"
-          description="Fetch & rebase origin/main"
-          icon={octicons.gitBranch}
-          style={ToolbarButtonStyle.Subtitle}
-          className="git-action-button"
-          disabled={disabled}
-          onClick={this.onRebaseOnMain}
-        />
-        <ToolbarButton
-          title="Reset to origin"
-          description="Reset branch to origin"
-          icon={octicons.alert}
-          style={ToolbarButtonStyle.Subtitle}
-          className="git-action-button"
-          disabled={disabled}
-          onClick={this.onResetToOrigin}
-        />
-      </>
-    )
-  }
-
   private renderToolbar() {
     /**
      * No toolbar if we're in the blank slate view.
@@ -4172,12 +3969,22 @@ export class App extends React.Component<IAppProps, IAppState> {
       return null
     }
 
+    const width = clamp(this.state.sidebarWidth)
+
     return (
       <Toolbar id="desktop-app-toolbar">
+        {showRepositoryToolbarDropdown && (
+          <div className="sidebar-section" style={{ width }}>
+            {this.renderRepositoryToolbarButton()}
+          </div>
+        )}
         {this.renderWorktreeToolbarButton()}
         {this.renderBranchToolbarButton()}
         {this.renderPushPullToolbarButton()}
-        {this.renderGitActionButtons()}
+        <GaitGitActions
+          dispatcher={this.props.dispatcher}
+          selectedState={this.state.selectedState}
+        />
       </Toolbar>
     )
   }

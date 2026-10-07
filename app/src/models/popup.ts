@@ -30,6 +30,10 @@ import type { IBYOKModel, IBYOKProvider } from '../lib/copilot/byok'
 import { WorktreeEntry } from './worktree'
 
 export enum PopupType {
+  // Gait popups (kept at the top to avoid conflicts with upstream additions)
+  ImportFromGitHubDesktop = 'ImportFromGitHubDesktop',
+  FileEditor = 'FileEditor',
+  ConfirmResetToOrigin = 'ConfirmResetToOrigin',
   RenameBranch = 'RenameBranch',
   DeleteBranch = 'DeleteBranch',
   DeleteRemoteBranch = 'DeleteRemoteBranch',
@@ -113,9 +117,6 @@ export enum PopupType {
   CopilotConflictResolutionDisclaimer = 'CopilotConflictResolutionDisclaimer',
   HookFailed = 'HookFailed',
   CommitProgress = 'CommitProgress',
-  ImportFromGitHubDesktop = 'ImportFromGitHubDesktop',
-  FileEditor = 'FileEditor',
-  ConfirmResetToOrigin = 'ConfirmResetToOrigin',
   AddWorktree = 'AddWorktree',
   RenameWorktree = 'RenameWorktree',
   DeleteWorktree = 'DeleteWorktree',
@@ -136,6 +137,18 @@ interface IBasePopup {
 }
 
 export type PopupDetail =
+  // Gait popups
+  | { type: PopupType.ImportFromGitHubDesktop }
+  | {
+      type: PopupType.FileEditor
+      repository: Repository
+      file: WorkingDirectoryFileChange
+    }
+  | {
+      type: PopupType.ConfirmResetToOrigin
+      repository: Repository
+      branchName: string
+    }
   | { type: PopupType.RenameBranch; repository: Repository; branch: Branch }
   | {
       type: PopupType.DeleteBranch
@@ -531,19 +544,6 @@ export type PopupDetail =
   | {
       type: PopupType.CommitProgress
       subscribeToCommitOutput: TerminalOutputListener
-    }
-  | {
-      type: PopupType.ImportFromGitHubDesktop
-    }
-  | {
-      type: PopupType.FileEditor
-      repository: Repository
-      file: WorkingDirectoryFileChange
-    }
-  | {
-      type: PopupType.ConfirmResetToOrigin
-      repository: Repository
-      branchName: string
     }
   | {
       type: PopupType.AddWorktree

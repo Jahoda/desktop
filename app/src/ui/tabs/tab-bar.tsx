@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ITabState } from '../../lib/app-state'
+import { ITabState } from '../../lib/gait/gait-state'
 import { TabItem } from './tab-item'
 
 interface ITabBarProps {

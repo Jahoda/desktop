@@ -385,7 +385,7 @@ export class BranchDropdown extends React.Component<IBranchDropdownProps> {
   }
 
   private onOpenWorktree = (branchName: string) => {
-    this.props.dispatcher.createWorktreeForBranch(
+    this.props.dispatcher.gait.createWorktreeForBranch(
       this.props.repository,
       branchName
     )

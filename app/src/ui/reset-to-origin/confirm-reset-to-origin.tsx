@@ -45,6 +45,6 @@ export class ConfirmResetToOrigin extends React.Component<IConfirmResetToOriginP
 
   private onReset = async () => {
     this.props.onDismissed()
-    await this.props.dispatcher.resetToOrigin(this.props.repository)
+    await this.props.dispatcher.gait.resetToOrigin(this.props.repository)
   }
 }

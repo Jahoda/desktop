@@ -167,6 +167,11 @@ export class Dispatcher {
     this.incrementMetric = statsStore.increment.bind(statsStore)
   }
 
+  /** Gait: tabs, panels and extra git operations */
+  public get gait() {
+    return this.appStore.gait
+  }
+
   /** Load the initial state for the app. */
   public loadInitialState(): Promise<void> {
     return this.appStore.loadInitialState()
@@ -302,52 +307,6 @@ export class Dispatcher {
     repository: Repository | CloningRepository
   ): Promise<Repository | null> {
     return this.appStore._selectRepository(repository)
-  }
-
-  /** Toggle the npm scripts panel */
-  public toggleNpmScriptsPanel(): void {
-    this.appStore._toggleNpmScriptsPanel()
-  }
-
-  /** Toggle the terminal panel */
-  public toggleTerminalPanel(): void {
-    this.appStore._toggleTerminalPanel()
-  }
-
-  /** Toggle the Claude chat panel */
-  public toggleClaudeChatPanel(): void {
-    this.appStore._toggleClaudeChatPanel()
-  }
-
-  /** Open a repository in a new tab */
-  public openTab(repository: Repository): void {
-    this.appStore._openTab(repository)
-  }
-
-  /**
-   * Create a git worktree for the given branch and open it in a new tab.
-   * The worktree is placed in a sibling directory of the repository.
-   */
-  public async createWorktreeForBranch(
-    repository: Repository,
-    branchName: string
-  ): Promise<void> {
-    return this.appStore._createWorktreeForBranch(repository, branchName)
-  }
-
-  /** Close a tab by index */
-  public closeTab(index: number): void {
-    this.appStore._closeTab(index)
-  }
-
-  /** Switch to a tab by index */
-  public selectTab(index: number): void {
-    this.appStore._selectTab(index)
-  }
-
-  /** Move a tab from one position to another */
-  public moveTab(fromIndex: number, toIndex: number): void {
-    this.appStore._moveTab(fromIndex, toIndex)
   }
 
   /** Change the selected section in the repository. */
@@ -802,16 +761,6 @@ export class Dispatcher {
   /** Pull the current branch. */
   public pull(repository: Repository): Promise<void> {
     return this.appStore._pull(repository)
-  }
-
-  /** Pull with rebase from the current remote. */
-  public pullRebase(repository: Repository): Promise<void> {
-    return this.appStore._pullRebase(repository)
-  }
-
-  /** Reset the current branch to match origin (after confirmation). */
-  public resetToOrigin(repository: Repository): Promise<void> {
-    return this.appStore._resetToOrigin(repository)
   }
 
   /** Fetch a specific refspec for the repository. */
@@ -1316,21 +1265,6 @@ export class Dispatcher {
     return this.appStore._removeAccount(account)
   }
 
-  /** Import data from GitHub Desktop (accounts, repositories, preferences). */
-  public importFromGitHubDesktop(
-    accounts: ReadonlyArray<
-      import('../../lib/import/github-desktop-importer').IGHDAccount
-    >,
-    repositories: ReadonlyArray<string>,
-    preferences: import('../../lib/import/github-desktop-importer').IGHDPreferences | null
-  ): Promise<void> {
-    return this.appStore._importFromGitHubDesktop(
-      accounts,
-      repositories,
-      preferences
-    )
-  }
-
   /**
    * Ask the dispatcher to apply a transformation function to the current
    * state of the application menu.
@@ -1418,16 +1352,6 @@ export class Dispatcher {
    */
   public setConflictsResolved(repository: Repository) {
     return this.appStore._setConflictsResolved(repository)
-  }
-
-  /** Rebase current branch onto the default branch (main/master) */
-  public async rebaseOntoDefaultBranch(
-    repository: Repository
-  ): Promise<void> {
-    const result = await this.appStore._rebaseOntoDefaultBranch(repository)
-    if (result === null) {
-      return
-    }
   }
 
   /** Starts a rebase for the given base and target branch */

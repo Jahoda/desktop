@@ -1,0 +1,9 @@
+// Gait: all Gait-specific styles. Imported last from desktop.scss so they can
+// override upstream rules without editing upstream partials.
+@import 'ui/repo-tabs';
+@import 'ui/npm-scripts';
+@import 'ui/terminal';
+@import 'ui/claude-chat';
+@import 'ui/import';
+@import 'ui/dialogs/file-editor';
+@import 'ui/gait-overrides';

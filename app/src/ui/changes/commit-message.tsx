@@ -264,6 +264,7 @@ interface ICommitMessageState {
   readonly repoRuleCommitMessageFailures: RepoRulesMetadataFailures
   readonly repoRuleCommitAuthorFailures: RepoRulesMetadataFailures
   readonly repoRuleBranchNameFailures: RepoRulesMetadataFailures
+  /** Gait: whether the description field is collapsed */
   readonly descriptionCollapsed: boolean
 }
 
@@ -1191,6 +1192,12 @@ export class CommitMessage extends React.Component<
     this.summaryTextInput = elem
   }
 
+  private onDescriptionToggleClick = () => {
+    this.setState(prev => ({
+      descriptionCollapsed: !prev.descriptionCollapsed,
+    }))
+  }
+
   private onFocusContainerClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.defaultPrevented) {
       // Our description text area is styled to look like it's a big textarea
@@ -1807,50 +1814,49 @@ export class CommitMessage extends React.Component<
 
         {this.state.isRuleFailurePopoverOpen && this.renderRuleFailurePopover()}
 
+        {this.props.showInputLabels === true && (
+          <label htmlFor="commit-message-description">Description</label>
+        )}
         <div
           className="description-toggle"
-          onClick={() =>
-            this.setState(prev => ({
-              descriptionCollapsed: !prev.descriptionCollapsed,
-            }))
-          }
+          onClick={this.onDescriptionToggleClick}
         >
           <span className="description-toggle-arrow">
             {this.state.descriptionCollapsed ? '\u25B6' : '\u25BC'}
           </span>
           <span className="description-toggle-label">Description</span>
         </div>
-        {!this.state.descriptionCollapsed && (
-          <FocusContainer
-            className="description-focus-container"
-            onClick={this.onFocusContainerClick}
-          >
-            <AutocompletingTextArea
-              inputId="commit-message-description"
-              className={descriptionClassName}
-              screenReaderLabel={
-                this.props.showInputLabels !== true
-                  ? 'Commit description'
-                  : undefined
-              }
-              placeholder="Description"
-              value={this.state.commitMessage.description || ''}
-              onValueChanged={this.onDescriptionChanged}
-              autocompletionProviders={
-                this.state.commitMessageAutocompletionProviders
-              }
-              aria-describedby={ariaDescribedBy}
-              ref={this.onDescriptionFieldRef}
-              onElementRef={this.onDescriptionTextAreaRef}
-              onContextMenu={this.onAutocompletingInputContextMenu}
-              readOnly={
-                isCommitting === true || isGeneratingCommitMessage === true
-              }
-              spellcheck={commitSpellcheckEnabled}
-            />
-            {this.renderActionBar()}
-          </FocusContainer>
-        )}
+        <FocusContainer
+          className={classNames('description-focus-container', {
+            collapsed: this.state.descriptionCollapsed,
+          })}
+          onClick={this.onFocusContainerClick}
+        >
+          <AutocompletingTextArea
+            inputId="commit-message-description"
+            className={descriptionClassName}
+            screenReaderLabel={
+              this.props.showInputLabels !== true
+                ? 'Commit description'
+                : undefined
+            }
+            placeholder="Description"
+            value={this.state.commitMessage.description || ''}
+            onValueChanged={this.onDescriptionChanged}
+            autocompletionProviders={
+              this.state.commitMessageAutocompletionProviders
+            }
+            aria-describedby={ariaDescribedBy}
+            ref={this.onDescriptionFieldRef}
+            onElementRef={this.onDescriptionTextAreaRef}
+            onContextMenu={this.onAutocompletingInputContextMenu}
+            readOnly={
+              isCommitting === true || isGeneratingCommitMessage === true
+            }
+            spellcheck={commitSpellcheckEnabled}
+          />
+          {this.renderActionBar()}
+        </FocusContainer>
 
         {this.renderCoAuthorInput()}
 

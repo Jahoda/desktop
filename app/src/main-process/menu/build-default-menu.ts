@@ -1,5 +1,6 @@
 import { Menu, shell, app, BrowserWindow } from 'electron'
 import { ensureItemIds } from './ensure-item-ids'
+import { addGaitMenuItems } from './gait-menu'
 import { MenuEvent } from './menu-event'
 import { truncateWithEllipsis } from '../../lib/truncate-with-ellipsis'
 import { getLogDirectoryPath } from '../../lib/logging/get-log-path'
@@ -72,10 +73,10 @@ export function buildDefaultMenuTemplate({
 
   if (__DARWIN__) {
     template.push({
-      label: 'Gait Desktop',
+      label: 'GitHub Desktop',
       submenu: [
         {
-          label: 'About Gait Desktop',
+          label: 'About GitHub Desktop',
           click: emit('show-about'),
           id: 'about',
         },
@@ -128,12 +129,6 @@ export function buildDefaultMenuTemplate({
         id: 'clone-repository',
         accelerator: 'CmdOrCtrl+Shift+O',
         click: emit('clone-repository'),
-      },
-      separator,
-      {
-        label: 'Import from GitHub Desktop…',
-        id: 'import-from-github-desktop',
-        click: emit('import-from-github-desktop'),
       },
     ],
   }
@@ -244,27 +239,6 @@ export function buildDefaultMenuTemplate({
         accelerator: 'CmdOrCtrl+L',
         click: emit('toggle-changes-filter'),
       },
-      separator,
-      {
-        label: __DARWIN__
-          ? 'Toggle NPM Scripts Panel'
-          : 'Toggle NPM Scripts &Panel',
-        id: 'toggle-npm-scripts-panel',
-        click: emit('toggle-npm-scripts-panel'),
-      },
-      {
-        label: __DARWIN__ ? 'Toggle Terminal' : 'Toggle &Terminal',
-        id: 'toggle-terminal-panel',
-        accelerator: 'CmdOrCtrl+`',
-        click: emit('toggle-terminal-panel'),
-      },
-      {
-        label: __DARWIN__ ? 'Toggle Claude Chat' : 'Toggle Claude &Chat',
-        id: 'toggle-claude-chat-panel',
-        accelerator: 'CmdOrCtrl+Shift+I',
-        click: emit('toggle-claude-chat-panel'),
-      },
-      separator,
       {
         label: __DARWIN__ ? 'Toggle Full Screen' : 'Toggle &full screen',
         role: 'togglefullscreen',
@@ -356,12 +330,6 @@ export function buildDefaultMenuTemplate({
         label: __DARWIN__ ? 'Pull' : 'Pu&ll',
         accelerator: 'CmdOrCtrl+Shift+P',
         click: emit('pull'),
-      },
-      {
-        id: 'pull-rebase',
-        label: __DARWIN__ ? 'Pull (Rebase)' : 'Pull (&Rebase)',
-        accelerator: 'CmdOrCtrl+Shift+R',
-        click: emit('pull-rebase'),
       },
       {
         id: 'fetch',
@@ -523,13 +491,6 @@ export function buildDefaultMenuTemplate({
       accelerator: 'CmdOrCtrl+Shift+E',
       click: emit('rebase-branch'),
     },
-    {
-      label: __DARWIN__
-        ? 'Rebase onto Default Branch'
-        : 'Rebase onto &default branch',
-      id: 'rebase-onto-default-branch',
-      click: emit('rebase-onto-default-branch'),
-    },
     separator,
     {
       label: __DARWIN__ ? 'Compare on GitHub' : 'Compare on &GitHub',
@@ -656,7 +617,7 @@ export function buildDefaultMenuTemplate({
         ...helpItems,
         separator,
         {
-          label: '&About Gait Desktop',
+          label: '&About GitHub Desktop',
           click: emit('show-about'),
           id: 'about',
         },
@@ -664,6 +625,7 @@ export function buildDefaultMenuTemplate({
     })
   }
 
+  addGaitMenuItems(template)
   ensureItemIds(template)
 
   return template

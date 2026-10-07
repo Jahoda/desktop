@@ -153,7 +153,6 @@ import {
   Foldout,
   FoldoutType,
   IAppState,
-  ITabState,
   ICompareBranch,
   ICompareFormUpdate,
   ICompareToBranch,
@@ -201,7 +200,6 @@ import {
   getWorkingDirectoryDiff,
   isCoAuthoredByTrailer,
   pull as pullRepo,
-  pullRebase as pullRebaseRepo,
   push as pushRepo,
   renameBranch,
   saveGitIgnore,
@@ -247,13 +245,6 @@ import {
   git,
 } from '../git'
 import {
-  findDefaultBranch,
-  isWorkingTreeClean,
-  rebaseOntoDefaultBranch,
-  IRebaseOntoResult,
-} from '../git/rebase-onto'
-import { resetToOrigin as resetToOriginGit } from '../git/reset-to-origin'
-import {
   installGlobalLFSFilters,
   installLFSHooks,
   isUsingLFS,
@@ -288,6 +279,7 @@ import { RepositoryStateCache } from './repository-state-cache'
 import { readEmoji } from '../read-emoji'
 import { Emoji } from '../emoji'
 import { GitStoreCache } from './git-store-cache'
+import { GaitStore } from './gait-store'
 import { GitErrorContext } from '../git-error-context'
 import {
   setNumber,
@@ -466,9 +458,6 @@ const LastSelectedRepositoryIDKey = 'last-selected-repository-id'
 const MaxPullRequestLookups = 10
 
 const RecentRepositoriesKey = 'recently-selected-repositories'
-
-const openTabsKey = 'open-tabs-repository-ids'
-const activeTabIndexKey = 'active-tab-index'
 /**
  *  maximum number of repositories shown in the "Recent" repositories group
  *  in the repository switcher dropdown
@@ -611,20 +600,26 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
   private selectedRepository: Repository | CloningRepository | null = null
 
-  /** Whether the npm scripts panel is visible */
-  private showNpmScriptsPanel: boolean = true
-
-  /** Whether the terminal panel is visible */
-  private showTerminalPanel: boolean = true
-
-  /** Whether the Claude chat panel is visible */
-  private showClaudeChatPanel: boolean = false
-
-  /** Open repository tabs */
-  private openTabs: ReadonlyArray<ITabState> = []
-
-  /** Index of the currently active tab */
-  private activeTabIndex: number = -1
+  /** Gait: tabs, panels and extra git operations (see gait-store.ts) */
+  public readonly gait: GaitStore = new GaitStore({
+    emitUpdate: () => this.emitUpdate(),
+    emitError: error => this.emitError(error),
+    selectRepository: repository => this._selectRepository(repository),
+    getGitStore: repository => this.gitStoreCache.get(repository),
+    getRepositoryState: repository => this.repositoryStateCache.get(repository),
+    withPushPullFetch: (repository, fn) =>
+      this.withPushPullFetch(repository, fn),
+    withRefreshedGitHubRepository: (repository, fn) =>
+      this.withRefreshedGitHubRepository(repository, fn),
+    updatePushPullFetchProgress: (repository, progress) =>
+      this.updatePushPullFetchProgress(repository, progress),
+    fastForwardBranches: repository => this.fastForwardBranches(repository),
+    refreshBranchProtectionState: repository =>
+      this.refreshBranchProtectionState(repository),
+    refreshRepository: repository => this._refreshRepository(repository),
+    addRepositories: paths => this._addRepositories(paths),
+    addAccount: account => this._addAccount(account),
+  })
 
   /** The background fetcher for the currently selected repository. */
   private currentBackgroundFetcher: BackgroundFetcher | null = null
@@ -1282,6 +1277,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
 
     return {
       accounts: this.accounts,
+      gait: this.gait.getState(),
       repositories,
       recentRepositories: this.recentRepositories,
       localRepositoryStateLookup: this.localRepositoryStateLookup,
@@ -1376,11 +1372,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
       alwaysUseCopilotForConflictResolution:
         this.alwaysUseCopilotForConflictResolution,
       showChangesFilter: this.showChangesFilter,
-      showNpmScriptsPanel: this.showNpmScriptsPanel,
-      showTerminalPanel: this.showTerminalPanel,
-      showClaudeChatPanel: this.showClaudeChatPanel,
-      openTabs: this.openTabs,
-      activeTabIndex: this.activeTabIndex,
       selectedCopilotModelsByAccount: this.selectedCopilotModelsByAccount,
       copilotModelsByAccount: this.copilotModelsByAccount,
       copilotQuotaSnapshotsByAccount: this.copilotQuotaSnapshotsByAccount,
@@ -1488,8 +1479,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       lastFetched: gitStore.lastFetched,
     }))
 
-    // Update tab branch name when the git store updates
-    this.updateCurrentTabBranchName(repository)
+    this.gait.onRepositoryUpdated(repository)
 
     // _selectWorkingDirectoryFiles and _selectStashedFile will
     // emit updates by themselves.
@@ -2183,9 +2173,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
       return Promise.resolve(null)
     }
 
-    // Ensure a tab exists for the selected repository
-    this.ensureTabForRepository(repository)
-
+    this.gait.ensureTabForRepository(repository)
     setNumber(LastSelectedRepositoryIDKey, repository.id)
 
     const previousRepositoryId = previouslySelectedRepository
@@ -2215,206 +2203,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
       refreshedRepository,
       previouslySelectedRepository
     )
-  }
-
-  /** Toggle the npm scripts panel visibility */
-  public _toggleNpmScriptsPanel(): void {
-    this.showNpmScriptsPanel = !this.showNpmScriptsPanel
-    this.emitUpdate()
-  }
-
-  /** Toggle the terminal panel visibility */
-  public _toggleTerminalPanel(): void {
-    this.showTerminalPanel = !this.showTerminalPanel
-    this.emitUpdate()
-  }
-
-  /** Toggle the Claude chat panel visibility */
-  public _toggleClaudeChatPanel(): void {
-    this.showClaudeChatPanel = !this.showClaudeChatPanel
-    this.emitUpdate()
-  }
-
-  /** Save open tabs to localStorage */
-  private saveOpenTabs(): void {
-    const tabIds = this.openTabs.map(t => t.repository.id)
-    setNumberArray(openTabsKey, tabIds)
-    setNumber(activeTabIndexKey, this.activeTabIndex)
-  }
-
-  /** Restore open tabs from localStorage */
-  private restoreOpenTabs(repositories: ReadonlyArray<Repository>): void {
-    const savedTabIds = getNumberArray(openTabsKey)
-    const savedActiveIndex = getNumber(activeTabIndexKey, 0)
-
-    if (savedTabIds.length === 0) {
-      return
-    }
-
-    const restoredTabs: ITabState[] = []
-    for (const id of savedTabIds) {
-      const repo = repositories.find(r => r.id === id)
-      if (repo) {
-        restoredTabs.push({ repository: repo, branchName: null })
-      }
-    }
-
-    if (restoredTabs.length > 0) {
-      this.openTabs = restoredTabs
-      this.activeTabIndex = Math.min(savedActiveIndex, restoredTabs.length - 1)
-
-      const activeTab = this.openTabs[this.activeTabIndex]
-      if (activeTab) {
-        this._selectRepository(activeTab.repository)
-      }
-    }
-  }
-
-  /** Open a repository in a new tab or switch to existing tab */
-  public _openTab(repository: Repository): void {
-    const existingIndex = this.openTabs.findIndex(
-      t => t.repository.id === repository.id
-    )
-
-    if (existingIndex >= 0) {
-      this.activeTabIndex = existingIndex
-    } else {
-      const branchName = this.getCurrentBranchName(repository)
-      const newTab: ITabState = { repository, branchName }
-      this.openTabs = [...this.openTabs, newTab]
-      this.activeTabIndex = this.openTabs.length - 1
-    }
-
-    this.saveOpenTabs()
-    this.emitUpdate()
-    this._selectRepository(repository)
-  }
-
-  /** Close a tab by index */
-  public _closeTab(index: number): void {
-    if (index < 0 || index >= this.openTabs.length) {
-      return
-    }
-
-    // Don't close the last tab
-    if (this.openTabs.length <= 1) {
-      return
-    }
-
-    const tabs = [...this.openTabs]
-    tabs.splice(index, 1)
-    this.openTabs = tabs
-
-    if (this.activeTabIndex >= tabs.length) {
-      this.activeTabIndex = tabs.length - 1
-    } else if (index < this.activeTabIndex) {
-      this.activeTabIndex = this.activeTabIndex - 1
-    } else if (index === this.activeTabIndex) {
-      // Switch to the tab that took the closed tab's position
-      this.activeTabIndex = Math.min(index, tabs.length - 1)
-    }
-
-    const activeTab = this.openTabs[this.activeTabIndex]
-    if (activeTab) {
-      this._selectRepository(activeTab.repository)
-    }
-
-    this.saveOpenTabs()
-    this.emitUpdate()
-  }
-
-  /** Switch to a tab by index */
-  public _selectTab(index: number): void {
-    if (index < 0 || index >= this.openTabs.length) {
-      return
-    }
-
-    this.activeTabIndex = index
-    const tab = this.openTabs[index]
-    this.saveOpenTabs()
-    this.emitUpdate()
-    this._selectRepository(tab.repository)
-  }
-
-  /** Move a tab from one position to another */
-  public _moveTab(fromIndex: number, toIndex: number): void {
-    if (
-      fromIndex < 0 ||
-      fromIndex >= this.openTabs.length ||
-      toIndex < 0 ||
-      toIndex >= this.openTabs.length
-    ) {
-      return
-    }
-
-    const tabs = [...this.openTabs]
-    const [moved] = tabs.splice(fromIndex, 1)
-    tabs.splice(toIndex, 0, moved)
-    this.openTabs = tabs
-
-    // Update active index to follow the active tab
-    if (this.activeTabIndex === fromIndex) {
-      this.activeTabIndex = toIndex
-    } else if (
-      fromIndex < this.activeTabIndex &&
-      toIndex >= this.activeTabIndex
-    ) {
-      this.activeTabIndex--
-    } else if (
-      fromIndex > this.activeTabIndex &&
-      toIndex <= this.activeTabIndex
-    ) {
-      this.activeTabIndex++
-    }
-
-    this.saveOpenTabs()
-    this.emitUpdate()
-  }
-
-  /** Update the branch name for the current tab */
-  private updateCurrentTabBranchName(repository: Repository): void {
-    const branchName = this.getCurrentBranchName(repository)
-    const tabIndex = this.openTabs.findIndex(
-      t => t.repository.id === repository.id
-    )
-
-    if (tabIndex >= 0) {
-      const tabs = [...this.openTabs]
-      tabs[tabIndex] = { ...tabs[tabIndex], branchName }
-      this.openTabs = tabs
-    }
-  }
-
-  /** Get the current branch name for a repository */
-  private getCurrentBranchName(repository: Repository): string | null {
-    try {
-      const gitStore = this.gitStoreCache.get(repository)
-      const tip = gitStore.tip
-      if (tip.kind === TipState.Valid) {
-        return tip.branch.name
-      }
-    } catch {
-      // ignore
-    }
-    return null
-  }
-
-  /** Ensure the selected repository has a tab open */
-  private ensureTabForRepository(repository: Repository): void {
-    const existingIndex = this.openTabs.findIndex(
-      t => t.repository.id === repository.id
-    )
-
-    if (existingIndex < 0) {
-      const branchName = this.getCurrentBranchName(repository)
-      const newTab: ITabState = { repository, branchName }
-      this.openTabs = [...this.openTabs, newTab]
-      this.activeTabIndex = this.openTabs.length - 1
-    } else {
-      this.activeTabIndex = existingIndex
-    }
-
-    this.saveOpenTabs()
   }
 
   // update the stored list of recently opened repositories
@@ -2662,9 +2450,7 @@ export class AppStore extends TypedBaseStore<IAppState> {
     this.accounts = accounts
     this.repositories = repositories
     this.alwaysShowWorktreeList = getBoolean(alwaysShowWorktreeListKey, false)
-
-    // Restore saved tabs
-    this.restoreOpenTabs(repositories)
+    this.gait.restoreOpenTabs(repositories)
 
     this.updateRepositorySelectionAfterRepositoriesChanged()
 
@@ -5697,88 +5483,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     })
   }
 
-  /** Pull with rebase from the current remote. */
-  public async _pullRebase(repository: Repository): Promise<void> {
-    return this.withRefreshedGitHubRepository(repository, repository => {
-      return this.performPullRebase(repository)
-    })
-  }
-
-  /** This shouldn't be called directly. See `Dispatcher`. */
-  private async performPullRebase(repository: Repository): Promise<void> {
-    return this.withPushPullFetch(repository, async () => {
-      const gitStore = this.gitStoreCache.get(repository)
-      const remote = gitStore.currentRemote
-
-      if (!remote) {
-        throw new Error('The repository has no remotes.')
-      }
-
-      const state = this.repositoryStateCache.get(repository)
-      const tip = state.branchesState.tip
-
-      if (tip.kind === TipState.Unborn) {
-        throw new Error('The current branch is unborn.')
-      }
-
-      if (tip.kind === TipState.Detached) {
-        throw new Error('The current repository is in a detached HEAD state.')
-      }
-
-      if (tip.kind === TipState.Valid) {
-        const title = `Pulling ${remote.name} (rebase)`
-        const kind = 'pull'
-        this.updatePushPullFetchProgress(repository, {
-          kind,
-          title,
-          value: 0,
-          remote: remote.name,
-        })
-
-        try {
-          const pullWeight = 0.6
-
-          await gitStore.performFailableOperation(
-            async () => {
-              await pullRebaseRepo(repository, remote, {
-                progressCallback: progress => {
-                  this.updatePushPullFetchProgress(repository, {
-                    ...progress,
-                    value: progress.value * pullWeight,
-                  })
-                },
-              })
-              return true
-            },
-            {
-              retryAction: {
-                type: RetryActionType.Pull,
-                repository,
-              },
-            }
-          )
-
-          const refreshTitle = __DARWIN__
-            ? 'Refreshing Repository'
-            : 'Refreshing repository'
-
-          this.updatePushPullFetchProgress(repository, {
-            kind: 'generic',
-            title: refreshTitle,
-            description: 'Fast-forwarding branches',
-            value: pullWeight,
-          })
-
-          await this.fastForwardBranches(repository)
-          await this.refreshBranchProtectionState(repository)
-          await this._refreshRepository(repository)
-        } finally {
-          this.updatePushPullFetchProgress(repository, null)
-        }
-      }
-    })
-  }
-
   /** This shouldn't be called directly. See `Dispatcher`. */
   private async performPull(repository: Repository): Promise<void> {
     return this.withPushPullFetch(repository, async () => {
@@ -7798,84 +7502,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     )
   }
 
-  /** Rebase current branch onto the default branch (main/master). See `Dispatcher`. */
-  public async _rebaseOntoDefaultBranch(
-    repository: Repository
-  ): Promise<IRebaseOntoResult | null> {
-    const state = this.repositoryStateCache.get(repository)
-    const { branchesState } = state
-    const { allBranches, tip } = branchesState
-
-    if (tip.kind !== TipState.Valid) {
-      return null
-    }
-
-    const defaultBranch = await findDefaultBranch(repository, allBranches)
-    if (defaultBranch === null) {
-      return null
-    }
-
-    // Don't rebase if we're already on the default branch
-    if (tip.branch.name === defaultBranch.name) {
-      return null
-    }
-
-    // Check for dirty working tree
-    const isClean = await isWorkingTreeClean(repository)
-    if (!isClean) {
-      this.emitUpdate()
-      return null
-    }
-
-    const result = await rebaseOntoDefaultBranch(repository, defaultBranch)
-
-    // Refresh the repository state after rebase
-    await this._refreshRepository(repository)
-
-    return result
-  }
-
-  /** Reset the current branch to match origin. See `Dispatcher`. */
-  public async _resetToOrigin(repository: Repository): Promise<void> {
-    const state = this.repositoryStateCache.get(repository)
-    const { branchesState } = state
-    const { tip } = branchesState
-
-    if (tip.kind !== TipState.Valid) {
-      return
-    }
-
-    const branchName = tip.branch.name
-    const gitStore = this.gitStoreCache.get(repository)
-    const remote = gitStore.currentRemote
-
-    if (!remote) {
-      return
-    }
-
-    await this.withPushPullFetch(repository, async () => {
-      try {
-        this.updatePushPullFetchProgress(repository, {
-          kind: 'generic',
-          title: `Resetting to origin/${branchName}`,
-          value: 0,
-        })
-
-        await resetToOriginGit(repository, branchName, remote.url)
-
-        this.updatePushPullFetchProgress(repository, {
-          kind: 'generic',
-          title: 'Refreshing repository',
-          value: 0.8,
-        })
-
-        await this._refreshRepository(repository)
-      } finally {
-        this.updatePushPullFetchProgress(repository, null)
-      }
-    })
-  }
-
   /** This shouldn't be called directly. See `Dispatcher`. */
   public async _rebase(
     repository: Repository,
@@ -8539,67 +8165,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     }
   }
 
-  /** Import accounts, repositories, and preferences from GitHub Desktop. */
-  public async _importFromGitHubDesktop(
-    accounts: ReadonlyArray<
-      import('../import/github-desktop-importer').IGHDAccount
-    >,
-    repositories: ReadonlyArray<string>,
-    preferences: import('../import/github-desktop-importer').IGHDPreferences | null
-  ): Promise<void> {
-    // Import accounts with tokens
-    for (const a of accounts) {
-      if (!a.token) {
-        continue
-      }
-
-      const account = new Account(
-        a.login,
-        a.endpoint,
-        a.token,
-        a.emails.map(e => ({
-          email: e,
-          verified: true,
-          primary: false,
-          visibility: null,
-        })),
-        a.avatarURL,
-        a.id,
-        a.name
-      )
-
-      await this._addAccount(account)
-    }
-
-    // Import repositories
-    if (repositories.length > 0) {
-      await this._addRepositories(repositories)
-    }
-
-    // Import preferences
-    if (preferences) {
-      if (preferences.externalEditor) {
-        localStorage.setItem('externalEditor', preferences.externalEditor)
-      }
-      if (preferences.shell) {
-        localStorage.setItem('shell', preferences.shell)
-      }
-      if (preferences.theme) {
-        localStorage.setItem('theme', preferences.theme)
-      }
-      if (preferences.hideWhitespaceInDiff) {
-        localStorage.setItem(
-          'hide-whitespace-in-diff',
-          preferences.hideWhitespaceInDiff
-        )
-      }
-    }
-
-    log.info(
-      `[AppStore] Imported from GitHub Desktop: ${accounts.length} accounts, ${repositories.length} repositories`
-    )
-  }
-
   public _updateRepositoryMissing(
     repository: Repository,
     missing: boolean
@@ -8728,39 +8293,6 @@ export class AppStore extends TypedBaseStore<IAppState> {
     }
 
     return addedRepositories
-  }
-
-  /**
-   * Create a git worktree for the given branch and open it as a new
-   * repository tab.
-   */
-  public async _createWorktreeForBranch(
-    repository: Repository,
-    branchName: string
-  ): Promise<void> {
-    const { addWorktree } = await import('../../lib/git/worktree')
-
-    // Place the worktree in a sibling directory named
-    // `<repo-basename>--<branch>` (e.g. feature/foo → repo--feature-foo)
-    const safeBranch = branchName.replace(/[/\\:*?"<>|]/g, '-')
-    const worktreePath = Path.resolve(
-      repository.path,
-      '..',
-      `${Path.basename(repository.path)}--${safeBranch}`
-    )
-    try {
-      await addWorktree(repository, worktreePath, { commitish: branchName })
-    } catch (e: any) {
-      this.emitError(
-        new Error(`Failed to create worktree for branch "${branchName}": ${e.message}`)
-      )
-      return
-    }
-
-    const addedRepos = await this._addRepositories([worktreePath])
-    if (addedRepos.length > 0) {
-      this._openTab(addedRepos[0])
-    }
   }
 
   public async _relocateRepository(repository: Repository): Promise<void> {

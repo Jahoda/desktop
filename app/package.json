@@ -1,8 +1,8 @@
 {
-  "name": "gait-desktop",
-  "productName": "Gait Desktop",
-  "bundleID": "com.gait.GaitDesktop",
-  "companyName": "Gait",
+  "name": "desktop",
+  "productName": "GitHub Desktop",
+  "bundleID": "com.github.GitHubClient",
+  "companyName": "GitHub, Inc.",
   "version": "3.6.7-beta2",
   "main": "./main.js",
   "repository": {
